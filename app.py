@@ -2206,30 +2206,62 @@ def main() -> None:
     st.set_page_config(
         page_title=t("page.title"),
         page_icon="⚡",
-        layout="centered",
+        layout="wide",
     )
 
     inject_styles()
-    render_language_switcher()
-    render_hero()
+    st.markdown(
+        '<style>[data-testid="stSidebar"]{background-color:#0F172A!important;color:#F8FAFC;}[data-testid="stSidebar"] label,[data-testid="stSidebar"] div,[data-testid="stSidebar"] p,[data-testid="stSidebar"] span{color:#F8FAFC!important;}</style>',
+        unsafe_allow_html=True,
+    )
 
-    tab_ideas, tab_script, tab_analyzer, tab_seo = st.tabs([
-        t("tab.ideas"),
-        t("tab.script"),
-        t("tab.analyzer"),
-        t("tab.seo"),
+    with st.sidebar:
+        st.title("⚡ TubeSpark")
+        st.caption("مُولّد أفكار يوتيوب الذكي")
+        lang = current_lang()
+        st.markdown("**الإعدادات**")
+        vibe = st.selectbox(
+            t("gen.vibe_label"),
+            options=list(VIBE_KEYS),
+            format_func=option_formatter("vibe", lang),
+            key="video_vibe",
+            on_change=_regenerate_on_mode_change,
+        )
+        audience = st.selectbox(
+            t("gen.audience_label"),
+            options=list(AUDIENCE_KEYS),
+            format_func=option_formatter("audience", lang),
+            key="audience",
+            on_change=_regenerate_on_mode_change,
+        )
+        platform = st.selectbox(
+            t("gen.platform_label"),
+            options=list(PLATFORM_KEYS),
+            format_func=option_formatter("platform", lang),
+            key="platform",
+            on_change=_regenerate_on_mode_change,
+        )
+        st.divider()
+        st.markdown("**اللغة**")
+        # keep language switcher behavior via pills? but simpler: reuse render_language_switcher? call inside sidebar is fine
+        render_language_switcher()
+
+    tab_ideas, tab_script, tab_analyze, tab_seo = st.tabs([
+        "💡 توليد الأفكار",
+        "📝 كاتب السكريبت",
+        "🎯 المقيّم الذكي",
+        "🚀 تحسين السيو",
     ])
     with tab_ideas:
         render_generator_tab()
     with tab_script:
         render_script_tab()
-    with tab_analyzer:
+    with tab_analyze:
         render_analyze_tab()
     with tab_seo:
         render_seo_tab()
 
     render_footer()
-
 
 if __name__ == "__main__":
     main()
