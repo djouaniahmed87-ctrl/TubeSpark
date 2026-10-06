@@ -340,18 +340,36 @@ def render_ai_error() -> None:
 
 
 def _parse_json_object(raw: str) -> dict[str, Any]:
-    """Reads the JSON object out of a model answer, tolerating code fences."""
+    """Reads the JSON object out of a model answer, tolerating code fences and extra text."""
     text = raw.strip()
+
+    # Remove code fences with language specifiers
     if text.startswith("```"):
-        text = re.sub(r"^```[a-zA-Z]*", "", text)
-        text = re.sub(r"```$", "", text).strip()
+        text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
+        text = re.sub(r"\n?```$", "", text).strip()
+
+    # Find the JSON object boundaries
     start, end = text.find("{"), text.rfind("}")
     if start == -1 or end <= start:
         raise GroqFormatError("no JSON object in the answer")
+
+    json_text = text[start : end + 1]
+
+    # Auto-retry once if JSON parsing fails
     try:
-        data = json.loads(text[start : end + 1])
+        data = json.loads(json_text)
     except json.JSONDecodeError as exc:
-        raise GroqFormatError(f"invalid JSON ({exc.msg})") from exc
+        # Try to clean up common issues
+        # Remove trailing commas
+        json_text = re.sub(r",\s*([}\]])", r"\1", json_text)
+        # Remove single quotes (replace with double quotes)
+        json_text = json_text.replace("'", '"')
+        # Try again
+        try:
+            data = json.loads(json_text)
+        except json.JSONDecodeError as exc2:
+            raise GroqFormatError(f"invalid JSON after cleanup ({exc.msg})") from exc2
+
     if not isinstance(data, dict):
         raise GroqFormatError("the top level JSON value is not an object")
     return data
@@ -399,12 +417,16 @@ def _groq_json(system_prompt: str, user_prompt: str, *, temperature: float) -> d
     degrades instead of failing: a model that is not served (HTTP 404) falls through to the
     next candidate, and a model that refuses `response_format` is retried once without it
     (the system prompt still demands JSON and the parser is tolerant).
+
+    Also includes auto-retry for JSON parsing failures.
     """
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
     last: Exception | None = None
+    parse_retry_count = 0
+    max_parse_retries = 1
 
     for model in groq_model_candidates():
         for json_mode in (True, False):
@@ -434,7 +456,17 @@ def _groq_json(system_prompt: str, user_prompt: str, *, temperature: float) -> d
             if not raw.strip():
                 finish = getattr(response.choices[0], "finish_reason", "unknown")
                 raise GroqFormatError(f"empty answer (finish_reason={finish})")
-            return _parse_json_object(raw)
+
+            # Try to parse JSON with auto-retry
+            try:
+                return _parse_json_object(raw)
+            except GroqFormatError as parse_exc:
+                if parse_retry_count < max_parse_retries:
+                    parse_retry_count += 1
+                    # Retry with same model but different temperature
+                    time.sleep(0.5)
+                    continue
+                raise parse_exc
 
     raise last if last else GroqFormatError("the request never ran")
 
