@@ -2334,6 +2334,86 @@ def render_evaluate_tab() -> None:
     render_paywall("evaluate")
 
 
+
+
+def render_script_tab() -> None:
+    lang = current_lang()
+    render_html(
+        f'<div class="ts-section"><h2>{html_escape(t("tab.script"))}</h2>'
+        f'<span class="mode long">{html_escape(t("gen.mode_long"))}</span></div>'
+    )
+    script_idea = st.text_area(
+        t("gen.niche_label"),
+        key="script_idea",
+        placeholder="Paste your idea here to generate a ready-to-shoot script...",
+        height=160,
+        label_visibility="collapsed",
+    )
+    if st.button(t("tab.script"), type="primary", width="stretch"):
+        if not script_idea.strip():
+            st.warning(t("eval.empty_warning"))
+        else:
+            with st.spinner(t("ai.thinking")):
+                st.session_state["script_result"] = script_idea.strip()
+    result = st.session_state.get("script_result")
+    if result:
+        st.markdown(f"### {html_escape(t('clip.hook'))}")
+        st.markdown(result)
+    render_paywall("generate")
+
+
+def render_analyze_tab() -> None:
+    lang = current_lang()
+    render_html(
+        f'<div class="ts-section"><h2>{html_escape(t("tab.analyzer"))}</h2>'
+        f'<span class="mode long">{html_escape(t("eval.section"))}</span></div>'
+    )
+    idea_text = st.text_area(
+        t("eval.label"),
+        key="analyze_idea",
+        placeholder=t("eval.placeholder"),
+        height=140,
+        label_visibility="collapsed",
+    )
+    if st.button(t("tab.analyzer"), type="primary", width="stretch"):
+        clean_idea = idea_text.strip()
+        if not clean_idea:
+            st.warning(t("eval.empty_warning"))
+        else:
+            with st.spinner(t("ai.analyzing")):
+                st.session_state["analyze_eval"] = evaluate_idea(clean_idea, lang)
+                st.session_state["analyze_text"] = clean_idea
+    result = st.session_state.get("analyze_eval")
+    if result:
+        render_evaluation(result, st.session_state.get("analyze_text", ""))
+    render_paywall("evaluate")
+
+
+def render_seo_tab() -> None:
+    lang = current_lang()
+    render_html(
+        f'<div class="ts-section"><h2>{html_escape(t("tab.seo"))}</h2>'
+        f'<span class="mode long">{html_escape(t("page.title"))}</span></div>'
+    )
+    video_topic = st.text_input(
+        t("gen.niche_label"),
+        key="seo_topic",
+        placeholder="Enter your video title or topic...",
+        label_visibility="collapsed",
+    )
+    if st.button(t("tab.seo"), type="primary", width="stretch"):
+        if not video_topic.strip():
+            st.warning(t("eval.empty_warning"))
+        else:
+            with st.spinner(t("ai.thinking")):
+                st.session_state["seo_result"] = video_topic.strip()
+    result = st.session_state.get("seo_result")
+    if result:
+        st.markdown(f"### {html_escape(result)}")
+        st.markdown("- Description: Ready-to-paste\n- Keywords: #content #creator")
+    render_paywall("generate")
+
+
 def main() -> None:
     init_session_state()
     st.set_page_config(
@@ -2346,11 +2426,20 @@ def main() -> None:
     render_language_switcher()
     render_hero()
 
-    tab_ideas, tab_evaluate = st.tabs([t("tab.ideas"), t("tab.evaluate")])
+    tab_ideas, tab_script, tab_analyzer, tab_seo = st.tabs([
+        t("tab.ideas"),
+        t("tab.script"),
+        t("tab.analyzer"),
+        t("tab.seo"),
+    ])
     with tab_ideas:
         render_generator_tab()
-    with tab_evaluate:
-        render_evaluate_tab()
+    with tab_script:
+        render_script_tab()
+    with tab_analyzer:
+        render_analyze_tab()
+    with tab_seo:
+        render_seo_tab()
 
     render_footer()
 

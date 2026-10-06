@@ -134,6 +134,31 @@ I18N: dict[str, dict[str, str]] = {
         "ar": "🎯 قيّم وطوّر فكرتي",
         "fr": "🎯 Notez et améliorez mon idée",
     },
+    "tab.script": {
+        "en": "✍️ Quick script writer",
+        "ar": "✍️ كاتب السكريبت السريع",
+        "fr": "✍️ Scénariste rapide",
+    },
+    "tab.seo": {
+        "en": "🚀 SEO booster",
+        "ar": "🚀 مُحسّن السيو",
+        "fr": "🚀 Booster SEO",
+    },
+    "tab.analyzer": {
+        "en": "🔍 Smart analyzer & rating",
+        "ar": "🔍 المحلل الذكي والتقييم",
+        "fr": "🔍 Analyseur intelligent",
+    },
+    "tab.thumbnails": {
+        "en": "🖼️ Thumbnail ideas",
+        "ar": "🖼️ أفكار الصورة المصغرة",
+        "fr": "🖼️ Idées de miniatures",
+    },
+    "tab.all": {
+        "en": "✨ All-in-one",
+        "ar": "✨ منصة متكاملة",
+        "fr": "✨ Tout-en-un",
+    },
     # ---- generator fields ----------------------------------------------------------
     "gen.niche_label": {
         "en": "What is your channel niche?",
