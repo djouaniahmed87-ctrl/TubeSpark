@@ -186,6 +186,17 @@ class Idea:
     hook: str
     value: str
     steps: tuple[str, ...] = ()
+    tags: tuple[str, ...] = ()
+    keywords: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class Script:
+    title: str
+    description: str
+    hashtags: tuple[str, ...]
+    keywords: tuple[str, ...]
+    sections: tuple[dict[str, str], ...]
 
 
 # --------------------------------------------------------------------------------------
@@ -454,16 +465,16 @@ def _idea_system_prompt(count: int, *, lang: str, short_form: bool) -> str:
         else "Each idea is a standalone video of 8 to 12 minutes, with room for story, examples "
         "and a payoff at the end."
     )
-    return f"""You are an expert viral content strategist with 10 years of experience on
-YouTube, TikTok and Instagram Reels. You turn one topic into ready-to-shoot video concepts
-that a beginner can film today with a phone.
+    return f"""You are an elite viral content strategist with 15+ years of experience across
+YouTube, TikTok, Instagram Reels, and Facebook. You specialize in creating high-retention,
+algorithm-friendly video concepts that convert viewers into subscribers.
 
 You always answer with valid JSON and nothing else: no markdown, no code fences, no
 explanation before or after the object.
 
 FIELDS
 - "title": one punchy line, max 90 characters, specific and honest, no hashtags, no channel
-  names, no fake promises.
+  names, no fake promises. Must include a curiosity gap or value promise.
 - "hook": the full opening, not a summary. Describe the exact first two seconds shot by
   shot: what the camera sees, the on-screen text or number, and the line the creator says.
   Three to four concrete sentences a viewer can picture immediately.
@@ -473,12 +484,16 @@ FIELDS
 - "steps": an array with exactly three execution steps, each one a short instruction the
   creator can follow with a phone: the shot to film, the line to say, and the asset or
   screen to record.
+- "tags": an array of 5-8 highly relevant, search-optimized hashtags related to the idea.
+- "keywords": an array of 3-5 SEO keywords for the title and description.
 
 DEPTH
 - Every idea must be substantial enough to film this week. No thin concepts.
 - Prefer a real number, a real tool, a real mistake or a real comparison over a general
   claim. Give the specifics a viewer would screenshot.
 - The hook must open on the payoff or the tension, never on an introduction.
+- Tags must be trending in the niche with proven engagement.
+- Keywords must have actual search volume potential.
 
 RULES
 - Return exactly {count} ideas, each one a single shootable video.
@@ -491,7 +506,7 @@ OUTPUT
 Reply with one valid JSON object using exactly this shape, with exactly {count} items in
 the "ideas" array:
 
-{{"ideas": [{{"title": "...", "hook": "...", "value": "...", "steps": ["...", "...", "..."]}}]}}"""
+{{"ideas": [{{"title": "...", "hook": "...", "value": "...", "steps": ["...", "...", "..."], "tags": ["...", "..."], "keywords": ["...", "..."]}}]}}"""
 
 
 def _idea_user_prompt(
@@ -573,6 +588,110 @@ Rate this idea, rewrite it stronger, and return the JSON object described in the
 prompt."""
 
 
+def _script_system_prompt(lang: str, short_form: bool) -> str:
+    rules = AI_LANGUAGE_RULES.get(lang, AI_LANGUAGE_RULES[DEFAULT_LANGUAGE])
+    duration_guide = (
+        "60 seconds maximum - every second must count"
+        if short_form
+        else "8-12 minutes with clear beginning, middle, and end"
+    )
+    return f"""You are a professional YouTube scriptwriter with 20+ years of experience in
+high-retention content creation. You write scripts that hook viewers instantly, maintain
+engagement throughout, and drive action.
+
+You always answer with valid JSON and nothing else: no markdown, no code fences, no
+explanation before or after the object.
+
+FIELDS
+- "title": an optimized, SEO-friendly video title (max 100 characters). Must include
+  the main keyword and create curiosity.
+- "description": a detailed video description (200-300 characters) optimized for search,
+  including the main keyword and value proposition.
+- "hashtag": an array of 10-15 highly relevant, trending hashtags. Mix broad and
+  niche-specific tags with proven engagement.
+- "keywords": an array of 5-8 SEO keywords for the title, description, and tags.
+- "sections": an array of script sections. Each section has:
+  - "name": section label (e.g., "Hook", "Main Content", "CTA")
+  - "time": timestamp (e.g., "0:00", "1:30")
+  - "content": detailed script content with dialogue, on-screen text, and shot descriptions
+  - "notes": specific production notes (camera angles, B-roll suggestions, transitions)
+
+SCRIPT STRUCTURE
+For long-form videos: Hook (0:00-0:30) → Intro (0:30-1:00) → Main Content (3-4 sections)
+→ Key Takeaway → CTA → Outro
+
+For short-form: Hook (0:00-0:03) → Quick Value (0:03-0:40) → CTA (0:40-0:60)
+
+ENGAGEMENT RULES
+- Every 30-60 seconds, include a pattern interrupt (question, visual change, stat)
+- Use pattern breaks: lists, examples, stories, comparisons
+- End each section with a transition to the next
+- Include 2-3 specific moments designed for comments/shares
+- Add timestamps in brackets [0:00] for easy editing
+
+PRODUCTION NOTES
+- Specify B-roll suggestions with timestamps
+- Include on-screen text suggestions
+- Note music/audio cue points
+- Suggest visual transitions between sections
+
+SEO OPTIMIZATION
+- Main keyword in first 150 characters of description
+- Tags must include: main keyword, related terms, trending tags
+- Title must be click-worthy but not clickbait
+- Keywords should match actual search intent
+
+RULES
+- Target duration: {duration_guide}
+- Write in conversational, engaging tone
+- No filler words - every line must earn its place
+- Include specific numbers, examples, or comparisons
+- CTA must be clear and compelling
+- {rules}
+
+OUTPUT
+Reply with one valid JSON object using exactly this shape:
+
+{{
+  "title": "...",
+  "description": "...",
+  "hashtag": ["...", "..."],
+  "keywords": ["...", "..."],
+  "sections": [
+    {{
+      "name": "...",
+      "time": "...",
+      "content": "...",
+      "notes": "..."
+    }}
+  ]
+}}"""
+
+
+def _script_user_prompt(
+    niche: str,
+    idea: str,
+    *,
+    platform: str,
+    vibe: str,
+    audience: str,
+    lang: str,
+) -> str:
+    return f"""VIDEO BRIEF
+- Topic / niche: {niche}
+- Core idea: {idea}
+- Platform: {option_label("platform", platform, lang)}
+- Video format: {t_for(lang, "gen.mode_short") if is_short_form(platform) else t_for(lang, "gen.mode_long")}
+- Tone and angle: {option_label("vibe", vibe, lang)}
+- Target audience: {option_label("audience", audience, lang)}
+
+Write a complete, production-ready script that a creator can film immediately.
+Focus on high retention, engagement, and SEO optimization.
+
+The brief is written in English; write the content in the language demanded by the system
+prompt."""
+
+
 def _ideas_from_groq(
     niche: str,
     count: int,
@@ -614,17 +733,93 @@ def _ideas_from_groq(
             if isinstance(raw_steps, list)
             else ()
         )
+        raw_tags = entry.get("tags")
+        tags = (
+            tuple(_model_text(tag, 50) for tag in raw_tags if _model_text(tag))[:8]
+            if isinstance(raw_tags, list)
+            else ()
+        )
+        raw_keywords = entry.get("keywords")
+        keywords = (
+            tuple(_model_text(kw, 50) for kw in raw_keywords if _model_text(kw))[:5]
+            if isinstance(raw_keywords, list)
+            else ()
+        )
         ideas.append(
             Idea(
                 title=title,
                 hook=_model_text(entry.get("hook"), 400),
                 value=_model_text(entry.get("value"), 400),
                 steps=steps,
+                tags=tags,
+                keywords=keywords,
             )
         )
     if not ideas:
         raise GroqFormatError("no usable idea in the answer")
     return ideas
+
+
+def _script_from_groq(
+    niche: str,
+    idea: str,
+    *,
+    platform: str,
+    vibe: str,
+    audience: str,
+    lang: str,
+) -> Script:
+    data = _groq_json(
+        _script_system_prompt(lang, short_form=is_short_form(platform)),
+        _script_user_prompt(
+            niche,
+            idea,
+            platform=platform,
+            vibe=vibe,
+            audience=audience,
+            lang=lang,
+        ),
+        temperature=0.7,
+    )
+
+    title = _model_text(data.get("title"), 140)
+    if not title:
+        raise GroqFormatError("no 'title' in the answer")
+
+    description = _model_text(data.get("description"), 500)
+    raw_hashtags = data.get("hashtag")
+    hashtags = (
+        tuple(_model_text(tag, 50) for tag in raw_hashtags if _model_text(tag))[:15]
+        if isinstance(raw_hashtags, list)
+        else ()
+    )
+    raw_keywords = data.get("keywords")
+    keywords = (
+        tuple(_model_text(kw, 50) for kw in raw_keywords if _model_text(kw))[:8]
+        if isinstance(raw_keywords, list)
+        else ()
+    )
+    raw_sections = data.get("sections")
+    if not isinstance(raw_sections, list):
+        raise GroqFormatError("no 'sections' array in the answer")
+
+    sections = []
+    for sec in raw_sections:
+        if isinstance(sec, dict):
+            sections.append({
+                "name": _model_text(sec.get("name"), 50),
+                "time": _model_text(sec.get("time"), 20),
+                "content": _model_text(sec.get("content"), 1000),
+                "notes": _model_text(sec.get("notes"), 300),
+            })
+
+    return Script(
+        title=title,
+        description=description,
+        hashtags=hashtags,
+        keywords=keywords,
+        sections=tuple(sections),
+    )
 
 
 def _evaluation_from_groq(text: str, lang: str) -> Evaluation:
@@ -1560,11 +1755,14 @@ __FONT_IMPORT__
 :root {
     --primary-1: #8B5CF6;
     --primary-2: #EC4899;
-    --ink: #1E293B;
-    --muted: #64748B;
-    --bg: #F7F9FC;
-    --card: #FFFFFF;
-    --border: #E2E8F0;
+    --accent: #A855F7;
+    --ink: #F1F5F9;
+    --muted: #94A3B8;
+    --bg-dark: #0F172A;
+    --bg-gradient: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F172A 100%);
+    --card-bg: rgba(30, 41, 59, 0.7);
+    --card-border: rgba(139, 92, 246, 0.3);
+    --glow: rgba(139, 92, 246, 0.5);
 }
 
 * {
@@ -1573,44 +1771,93 @@ __FONT_IMPORT__
 
 html, body, .stApp {
     direction: __DIRECTION__;
-    text-align: right;
-    background: var(--bg);
+    text-align: __ALIGN__;
+    background: var(--bg-gradient);
+    background-attachment: fixed;
+    min-height: 100vh;
+}
+
+/* Animated background particles */
+.stApp::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+        radial-gradient(circle at 20% 80%, rgba(139, 92, 246, 0.15) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(236, 72, 153, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 40% 40%, rgba(168, 85, 247, 0.08) 0%, transparent 40%);
+    pointer-events: none;
+    z-index: 0;
 }
 
 .block-container {
     max-width: 1080px;
-    padding-top: 1.5rem;
-    padding-bottom: 2.5rem;
+    padding-top: 2rem;
+    padding-bottom: 3rem;
+    position: relative;
+    z-index: 1;
 }
 
-/* Inputs */
+/* Inputs - Glass effect */
 div[data-baseweb="input"] input,
 div[data-baseweb="select"] select,
 textarea {
-    background: #FFFFFF !important;
+    background: rgba(30, 41, 59, 0.8) !important;
     color: var(--ink) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 8px !important;
+    border: 1px solid var(--card-border) !important;
+    border-radius: 12px !important;
     font-size: 0.98rem;
     line-height: 1.6;
-    box-shadow: none !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
 }
 
 div[data-baseweb="input"] input::placeholder,
 textarea::placeholder {
     color: var(--muted) !important;
-    opacity: 1 !important;
+    opacity: 0.8 !important;
 }
 
 div[data-baseweb="input"]:focus-within input,
 div[data-baseweb="select"]:focus-within select,
 textarea:focus {
-    border-color: var(--primary-1) !important;
-    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.18) !important;
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.3), 0 4px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
     outline: none !important;
+    background: rgba(30, 41, 59, 0.95) !important;
 }
 
-/* Buttons */
+/* Pills/Radio buttons */
+[data-testid="stPills"] button,
+[data-testid="stRadio"] > div > label {
+    background: rgba(30, 41, 59, 0.6) !important;
+    color: var(--ink) !important;
+    border: 1px solid var(--card-border) !important;
+    border-radius: 50px !important;
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+}
+
+[data-testid="stPills"] button:hover,
+[data-testid="stRadio"] > div > label:hover {
+    border-color: var(--accent) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(168, 85, 247, 0.3);
+}
+
+[data-testid="stPills"] button[kind="primary"],
+[data-testid="stRadio"] > div > label[data-selected="true"] {
+    background: linear-gradient(135deg, var(--primary-1), var(--accent)) !important;
+    border-color: transparent !important;
+    color: #FFFFFF !important;
+    box-shadow: 0 4px 20px rgba(139, 92, 246, 0.5);
+}
+
+/* Buttons - Modern gradient with glow */
 div.stButton > button {
     border: none !important;
     background: linear-gradient(135deg, var(--primary-1), var(--primary-2)) !important;
@@ -1618,74 +1865,995 @@ div.stButton > button {
     font-weight: 800;
     font-size: 0.98rem;
     border-radius: 50px !important;
-    padding: 0.7rem 1.6rem;
-    box-shadow: 0 12px 30px -12px rgba(139, 92, 246, 0.9);
+    padding: 0.8rem 2rem;
+    box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4), 0 0 40px rgba(139, 92, 246, 0.2);
     transition: all 0.3s ease;
-    letter-spacing: 0.2px;
+    letter-spacing: 0.3px;
+    position: relative;
+    overflow: hidden;
+}
+
+div.stButton > button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    transition: left 0.5s ease;
+}
+
+div.stButton > button:hover::before {
+    left: 100%;
 }
 
 div.stButton > button:hover {
-    filter: brightness(1.08);
-    transform: translateY(-2px);
-    box-shadow: 0 16px 36px -14px rgba(139, 92, 246, 1);
+    filter: brightness(1.1);
+    transform: translateY(-3px);
+    box-shadow: 0 12px 35px rgba(139, 92, 246, 0.6), 0 0 50px rgba(139, 92, 246, 0.3);
 }
 
-/* Premium cards */
+/* Premium cards - Glass effect with purple glow */
 .premium-card {
-    background: var(--card);
-    border-radius: 16px;
-    border: 1px solid rgba(0, 0, 0, 0.05);
-    box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.05);
-    padding: 24px;
-    margin-bottom: 18px;
-    transition: all 0.3s ease;
-    text-align: right;
+    background: var(--card-bg);
+    border-radius: 20px;
+    border: 1px solid var(--card-border);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 20px rgba(139, 92, 246, 0.1);
+    padding: 28px;
+    margin-bottom: 20px;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    text-align: __ALIGN__;
+    backdrop-filter: blur(20px);
+    position: relative;
+    overflow: hidden;
+}
+
+.premium-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--primary-1), var(--accent), var(--primary-2));
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.premium-card:hover::before {
+    opacity: 1;
 }
 
 .premium-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 18px 40px -10px rgba(139, 92, 246, 0.18);
+    transform: translateY(-8px);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4), 0 0 30px rgba(139, 92, 246, 0.3);
+    border-color: var(--accent);
 }
 
 .premium-card h3 {
-    margin: 0 0 14px 0;
-    font-size: 1.14rem;
+    margin: 0 0 16px 0;
+    font-size: 1.2rem;
     font-weight: 800;
     color: var(--ink);
     line-height: 1.6;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
 }
 
 .premium-card .meta {
     color: var(--muted);
-    font-size: 0.92rem;
+    font-size: 0.94rem;
     line-height: 1.9;
-    margin-bottom: 12px;
+    margin-bottom: 14px;
 }
 
 .premium-card .row {
-    margin: 14px 0;
+    margin: 16px 0;
 }
 
 .premium-card .badge {
     display: inline-block;
-    padding: 6px 14px;
+    padding: 8px 16px;
     border-radius: 999px;
-    font-size: 0.8rem;
+    font-size: 0.82rem;
     font-weight: 800;
-    background: rgba(139, 92, 246, 0.12);
-    color: var(--primary-1);
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(168, 85, 247, 0.2));
+    color: var(--accent);
     margin-bottom: 12px;
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    box-shadow: 0 2px 10px rgba(139, 92, 246, 0.2);
 }
 
 .premium-card ol {
     margin: 0;
-    padding-right: 22px;
+    padding-right: 24px;
     color: var(--ink);
     line-height: 1.9;
 }
 
 .premium-card li + li {
-    margin-top: 8px;
+    margin-top: 10px;
+}
+
+.premium-card .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.premium-card .tag {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(168, 85, 247, 0.2));
+    color: var(--accent);
+    padding: 0.3rem 0.7rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(30, 41, 59, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, var(--primary-1), var(--accent));
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, var(--accent), var(--primary-2));
+}
+
+/* Hero section text color override */
+.ts-hero h1,
+.ts-hero p {
+    color: var(--ink) !important;
+}
+
+.ts-hero .accent {
+    background: linear-gradient(90deg, var(--primary-1), var(--accent), var(--primary-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+/* Section titles */
+.ts-section h2 {
+    color: var(--ink) !important;
+}
+
+/* Paywall - Special styling */
+.ts-paywall {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(236, 72, 153, 0.15));
+    border: 2px solid var(--card-border);
+    border-radius: 24px;
+    padding: 4px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 40px rgba(139, 92, 246, 0.2);
+}
+
+.ts-paywall-inner {
+    background: rgba(30, 41, 59, 0.9);
+    border-radius: 20px;
+    padding: 2.5rem;
+    backdrop-filter: blur(20px);
+}
+
+.ts-paywall h2 {
+    color: var(--ink) !important;
+}
+
+.ts-paywall .price {
+    color: var(--accent) !important;
+}
+
+.ts-paywall ul li {
+    color: var(--muted) !important;
+}
+
+/* Pricing Section */
+.ts-pricing-section {
+    margin-top: 3rem;
+    padding: 3rem 0;
+}
+
+.ts-pricing-header {
+    text-align: center;
+    margin-bottom: 3rem;
+}
+
+.ts-pricing-header h2 {
+    font-size: clamp(1.8rem, 4vw, 2.5rem);
+    font-weight: 800;
+    margin-bottom: 0.8rem;
+    color: var(--ink);
+}
+
+.ts-pricing-header p {
+    font-size: 1.1rem;
+    color: var(--muted);
+}
+
+.ts-pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+@media (max-width: 900px) {
+    .ts-pricing-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.ts-pricing-card {
+    background: var(--card-bg);
+    border: 2px solid var(--card-border);
+    border-radius: 24px;
+    padding: 2.5rem;
+    text-align: center;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(20px);
+    position: relative;
+    overflow: hidden;
+}
+
+.ts-pricing-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--primary-1), var(--accent));
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.ts-pricing-card:hover::before {
+    opacity: 1;
+}
+
+.ts-pricing-card:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 40px rgba(139, 92, 246, 0.3);
+    border-color: var(--accent);
+}
+
+.ts-pricing-card.featured {
+    border: 2px solid var(--accent);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 40px rgba(139, 92, 246, 0.4);
+    transform: scale(1.05);
+}
+
+.ts-pricing-card.featured:hover {
+    transform: scale(1.05) translateY(-10px);
+}
+
+.ts-pricing-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, var(--primary-1), var(--accent));
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 800;
+    padding: 0.4rem 1rem;
+    border-radius: 999px;
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.ts-pricing-badge.popular {
+    background: linear-gradient(135deg, #F59E0B, #EF4444);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
+}
+
+.ts-pricing-card h3 {
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin: 0 0 0.5rem;
+    color: var(--ink);
+}
+
+.ts-price {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--accent);
+    margin-bottom: 2rem;
+}
+
+.ts-price span {
+    font-size: 1rem;
+    color: var(--muted);
+    font-weight: 500;
+}
+
+.ts-features {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 2rem;
+    text-align: right;
+}
+
+.ts-features li {
+    padding: 0.8rem 0;
+    color: var(--muted);
+    font-size: 0.95rem;
+    border-bottom: 1px solid rgba(139, 92, 246, 0.1);
+}
+
+.ts-features li:last-child {
+    border-bottom: none;
+}
+
+.ts-features li.disabled {
+    color: rgba(148, 163, 184, 0.5);
+    text-decoration: line-through;
+}
+
+.ts-pricing-btn {
+    display: block;
+    width: 100%;
+    padding: 1rem 2rem;
+    border-radius: 50px;
+    font-weight: 800;
+    font-size: 1rem;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    border: 2px solid var(--card-border);
+    background: rgba(30, 41, 59, 0.6);
+    color: var(--muted);
+    backdrop-filter: blur(10px);
+}
+
+.ts-pricing-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: translateY(-2px);
+}
+
+.ts-pricing-btn.primary {
+    background: linear-gradient(135deg, var(--primary-1), var(--accent));
+    border: none;
+    color: white;
+    box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4);
+}
+
+.ts-pricing-btn.primary:hover {
+    filter: brightness(1.1);
+    transform: translateY(-3px);
+    box-shadow: 0 12px 35px rgba(139, 92, 246, 0.6);
+}
+
+.ts-pricing-footer {
+    text-align: center;
+    margin-top: 2rem;
+    padding: 1.5rem;
+    background: rgba(30, 41, 59, 0.4);
+    border-radius: 12px;
+    border: 1px solid var(--card-border);
+}
+
+.ts-pricing-footer p {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+/* Script Result Styles */
+.ts-script-result {
+    background: var(--card-bg);
+    border: 2px solid var(--card-border);
+    border-radius: 20px;
+    padding: 2rem;
+    margin-top: 2rem;
+    backdrop-filter: blur(20px);
+}
+
+.ts-script-header {
+    text-align: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--card-border);
+}
+
+.ts-script-header h3 {
+    font-size: 1.8rem;
+    font-weight: 800;
+    margin: 0;
+    color: var(--ink);
+}
+
+.ts-script-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+@media (max-width: 768px) {
+    .ts-script-meta {
+        grid-template-columns: 1fr;
+    }
+}
+
+.ts-meta-item {
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 1rem;
+}
+
+.ts-meta-item .label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+}
+
+.ts-meta-item .value {
+    display: block;
+    font-size: 1rem;
+    color: var(--ink);
+    line-height: 1.6;
+}
+
+.ts-script-tags,
+.ts-script-keywords {
+    margin-bottom: 1.5rem;
+}
+
+.ts-script-tags .badge,
+.ts-script-keywords .badge {
+    display: inline-block;
+    background: linear-gradient(135deg, var(--primary-1), var(--accent));
+    color: white;
+    font-size: 0.85rem;
+    font-weight: 800;
+    padding: 0.4rem 1rem;
+    border-radius: 999px;
+    margin-bottom: 0.8rem;
+}
+
+.ts-script-tags .tags-list,
+.ts-script-keywords .keywords-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.ts-script-tags .tag {
+    background: rgba(139, 92, 246, 0.2);
+    color: var(--accent);
+    padding: 0.4rem 0.8rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.ts-script-keywords .keywords-list {
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.8;
+}
+
+.ts-script-sections {
+    margin-top: 2rem;
+}
+
+.ts-script-sections h4 {
+    font-size: 1.3rem;
+    font-weight: 800;
+    margin-bottom: 1.5rem;
+    color: var(--ink);
+}
+
+.ts-script-section {
+    background: rgba(30, 41, 59, 0.4);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    transition: all 0.3s ease;
+}
+
+.ts-script-section:hover {
+    border-color: var(--accent);
+    transform: translateX(5px);
+}
+
+.ts-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.8rem;
+    border-bottom: 1px dashed var(--card-border);
+}
+
+.ts-section-header .name {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--accent);
+}
+
+.ts-section-header .time {
+    background: linear-gradient(135deg, var(--primary-1), var(--accent));
+    color: white;
+    font-size: 0.85rem;
+    font-weight: 800;
+    padding: 0.3rem 0.8rem;
+    border-radius: 999px;
+}
+
+.ts-section-content {
+    color: var(--ink);
+    font-size: 1rem;
+    line-height: 1.9;
+    white-space: pre-wrap;
+    margin-bottom: 1rem;
+}
+
+.ts-section-notes {
+    background: rgba(234, 179, 8, 0.1);
+    border: 1px solid rgba(234, 179, 8, 0.3);
+    border-radius: 8px;
+    padding: 0.8rem 1rem;
+    color: #EAB308;
+    font-size: 0.9rem;
+    font-style: italic;
+}
+
+/* Footer */
+.ts-footer {
+    margin-top: 4rem;
+    padding: 3rem 0;
+    background: rgba(30, 41, 59, 0.4);
+    border-top: 1px solid var(--card-border);
+    backdrop-filter: blur(10px);
+}
+
+.ts-footer-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    padding: 0 2rem;
+}
+
+@media (max-width: 768px) {
+    .ts-footer-content {
+        grid-template-columns: 1fr;
+        text-align: center;
+    }
+}
+
+.ts-footer-brand h3 {
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin: 0 0 0.5rem;
+    color: var(--ink);
+}
+
+.ts-footer-brand p {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin: 0;
+}
+
+.ts-footer-links {
+    display: flex;
+    gap: 2rem;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+@media (max-width: 768px) {
+    .ts-footer-links {
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+}
+
+.ts-footer-links a {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: color 0.3s ease;
+}
+
+.ts-footer-links a:hover {
+    color: var(--accent);
+}
+
+.ts-footer-bottom {
+    max-width: 1200px;
+    margin: 2rem auto 0;
+    padding: 1.5rem 2rem;
+    border-top: 1px solid var(--card-border);
+    text-align: center;
+}
+
+.ts-footer-bottom p {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+/* Note boxes */
+.ts-note {
+    background: rgba(30, 41, 59, 0.6) !important;
+    border: 2px dashed var(--card-border) !important;
+    color: var(--muted) !important;
+    backdrop-filter: blur(10px);
+}
+
+/* Hero section */
+.ts-hero {
+    text-align: center;
+    margin-bottom: 2.5rem;
+    padding: 2rem 0;
+}
+
+.ts-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, var(--primary-1), var(--accent));
+    color: #FFFFFF;
+    font-weight: 800;
+    font-size: 0.85rem;
+    padding: 0.5rem 1.2rem;
+    border-radius: 999px;
+    margin-bottom: 1.2rem;
+    box-shadow: 0 4px 20px rgba(139, 92, 246, 0.4);
+    letter-spacing: 0.5px;
+}
+
+.ts-hero h1 {
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    line-height: 1.3;
+    margin: 0 0 1rem;
+    font-weight: 800;
+    text-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.ts-hero p {
+    font-size: clamp(1rem, 2.5vw, 1.15rem);
+    color: var(--muted);
+    max-width: 50ch;
+    margin: 0 auto;
+    line-height: 1.7;
+}
+
+/* Social proof */
+.ts-proof {
+    text-align: center;
+    margin-bottom: 2rem;
+    padding: 1rem;
+    background: rgba(30, 41, 59, 0.4);
+    border-radius: 12px;
+    border: 1px solid var(--card-border);
+    backdrop-filter: blur(10px);
+}
+
+.ts-proof .item {
+    color: var(--muted);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.ts-proof .sep {
+    color: var(--accent);
+    margin: 0 0.8rem;
+    font-weight: 800;
+}
+
+/* Section headers */
+.ts-section {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    margin: 2.5rem 0 1.5rem;
+    padding-bottom: 0.8rem;
+    border-bottom: 2px solid var(--card-border);
+}
+
+.ts-section h2 {
+    font-size: clamp(1.3rem, 3.5vw, 1.6rem);
+    margin: 0;
+    font-weight: 800;
+}
+
+.ts-section .count {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(168, 85, 247, 0.2));
+    color: var(--accent);
+    border-radius: 999px;
+    padding: 0.3rem 0.8rem;
+    font-size: 0.85rem;
+    font-weight: 800;
+    border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.ts-section .mode {
+    background: rgba(30, 41, 59, 0.6);
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 0.3rem 0.8rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    border: 1px solid var(--card-border);
+}
+
+/* Evaluation cards */
+.ts-card {
+    background: var(--card-bg);
+    border-radius: 20px;
+    border: 1px solid var(--card-border);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    padding: 24px;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(20px);
+}
+
+.ts-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4), 0 0 30px rgba(139, 92, 246, 0.2);
+    border-color: var(--accent);
+}
+
+.ts-card .num {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 1rem;
+    color: #FFFFFF;
+    background: linear-gradient(135deg, var(--primary-1), var(--accent));
+    box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4);
+}
+
+.ts-card h3 {
+    margin: 0 0 16px 0;
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--ink);
+    line-height: 1.5;
+}
+
+.ts-card .row {
+    margin: 16px 0;
+    padding-top: 16px;
+    border-top: 1px dashed var(--card-border);
+}
+
+.ts-card .lbl {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+    padding: 0.4rem 0.8rem;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+}
+
+.ts-card .lbl.hook {
+    background: linear-gradient(135deg, rgba(236, 72, 153, 0.2), rgba(168, 85, 247, 0.2));
+    color: var(--primary-2);
+    border: 1px solid rgba(236, 72, 153, 0.3);
+}
+
+.ts-card .lbl.value {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.2));
+    color: #22C55E;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.ts-card .lbl.angle {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(168, 85, 247, 0.2));
+    color: var(--accent);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.ts-card .lbl.outline-lbl {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(99, 102, 241, 0.2));
+    color: #3B82F6;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.ts-card p {
+    margin: 0;
+    font-size: 0.94rem;
+    line-height: 1.8;
+    color: var(--muted);
+}
+
+.ts-card.improved {
+    border: 2px solid var(--accent);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 30px rgba(139, 92, 246, 0.3);
+}
+
+.ts-flag {
+    display: inline-block;
+    background: linear-gradient(135deg, var(--primary-1), var(--accent));
+    color: #FFFFFF;
+    font-size: 0.75rem;
+    font-weight: 800;
+    padding: 0.4rem 0.8rem;
+    border-radius: 6px;
+    margin-bottom: 0.8rem;
+}
+
+.ts-outline {
+    margin: 0;
+    padding-right: 20px;
+    color: var(--ink);
+    line-height: 1.9;
+}
+
+.ts-outline li {
+    margin-bottom: 0.6rem;
+}
+
+/* Evaluation grid */
+.ts-eval-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+}
+
+@media (max-width: 768px) {
+    .ts-eval-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Language bar */
+.ts-lang-bar {
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.ts-lang-bar .label {
+    display: inline-block;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+}
+
+/* Chips label */
+.ts-chips-label {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin: 1rem 0 0.5rem;
+    font-weight: 700;
+}
+
+/* Input container */
+.ts-input-container {
+    background: rgba(30, 41, 59, 0.4);
+    border: 1px solid var(--card-border);
+    border-radius: 20px;
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+    backdrop-filter: blur(10px);
+}
+
+/* Field labels */
+.ts-field-label {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Copy button styling */
+.ts-copy-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+}
+
+.ts-copy-btn:hover {
+    background: rgba(139, 92, 246, 0.2);
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: translateY(-2px);
+}
+
+/* Columns gap */
+[data-testid="column"] {
+    padding: 0 0.5rem;
+}
+
+/* Metric cards */
+[data-testid="stMetricValue"] {
+    color: var(--ink) !important;
+    font-weight: 800;
+}
+
+[data-testid="stMetricDelta"] {
+    color: #22C55E !important;
+    font-weight: 700;
+}
+
+/* Progress bar */
+[data-testid="stProgress"] > div > div > div {
+    background: linear-gradient(90deg, var(--primary-1), var(--accent)) !important;
+}
+
+/* Expander */
+[data-testid="stExpander"] {
+    background: rgba(30, 41, 59, 0.6) !important;
+    border: 1px solid var(--card-border) !important;
+    border-radius: 12px;
+}
+
+[data-testid="stExpander"] > div {
+    color: var(--ink) !important;
+}
+
+/* Success/Error messages */
+.stSuccess {
+    background: rgba(34, 197, 94, 0.2) !important;
+    border: 1px solid rgba(34, 197, 94, 0.4) !important;
+    border-radius: 12px;
+    color: #22C55E !important;
+}
+
+.stWarning {
+    background: rgba(234, 179, 8, 0.2) !important;
+    border: 1px solid rgba(234, 179, 8, 0.4) !important;
+    border-radius: 12px;
+    color: #EAB308 !important;
+}
+
+.stError {
+    background: rgba(239, 68, 68, 0.2) !important;
+    border: 1px solid rgba(239, 68, 68, 0.4) !important;
+    border-radius: 12px;
+    color: #EF4444 !important;
+}
+
+/* Info messages */
+.stInfo {
+    background: rgba(59, 130, 246, 0.2) !important;
+    border: 1px solid rgba(59, 130, 246, 0.4) !important;
+    border-radius: 12px;
+    color: #3B82F6 !important;
 }
 </style>
 """
@@ -1719,12 +2887,40 @@ def render_html(markup: str) -> None:
 def inject_styles() -> None:
     """Injects the stylesheet, tuned to the active language (font + text direction)."""
     lang = current_lang()
+    align = "right" if is_rtl() else "left"
     css = (
         CSS_TEMPLATE.replace("__FONT_IMPORT__", FONT_IMPORTS[lang])
         .replace("__FONT__", FONT_STACKS[lang])
         .replace("__DIRECTION__", text_direction())
+        .replace("__ALIGN__", align)
     )
     render_html(css)
+
+    # Additional inline styles for critical elements
+    st.markdown(
+        """
+        <style>
+        /* Force dark background */
+        .stApp {
+            background: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F172A 100%) !important;
+        }
+
+        /* Override Streamlit default styles */
+        .stTextInput > div > div > input,
+        .stSelectbox > div > div > select {
+            background: rgba(30, 41, 59, 0.8) !important;
+            color: #F1F5F9 !important;
+            border: 1px solid rgba(139, 92, 246, 0.3) !important;
+        }
+
+        .stButton > button {
+            background: linear-gradient(135deg, #8B5CF6, #EC4899) !important;
+            color: white !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # --------------------------------------------------------------------------------------
@@ -1814,6 +3010,18 @@ def render_idea_cards(ideas: list[Idea], niche: str, *, platform: str) -> None:
             with column:
                 steps = "".join(f"<li>{html_escape(step)}</li>" for step in idea.steps)
                 plan_html = f'<div class="row"><span class="badge">{plan_label}</span><ol>{steps}</ol></div>' if steps else ""
+
+                # Tags and keywords
+                tags_html = ""
+                if idea.tags:
+                    tags_list = " ".join(f"<span class='tag'>#{html_escape(tag)}</span>" for tag in idea.tags[:5])
+                    tags_html = f'<div class="row"><span class="badge">الهاشتاغات</span><div class="tags">{tags_list}</div></div>'
+
+                keywords_html = ""
+                if idea.keywords:
+                    keywords_list = ", ".join(html_escape(kw) for kw in idea.keywords[:3])
+                    keywords_html = f'<div class="row"><span class="badge">كلمات مفتاحية</span><div class="meta">{keywords_list}</div></div>'
+
                 render_html(
                     f"""
                     <div class="premium-card">
@@ -1828,6 +3036,8 @@ def render_idea_cards(ideas: list[Idea], niche: str, *, platform: str) -> None:
                             <div class="meta">{html_escape(idea.value)}</div>
                         </div>
                         {plan_html}
+                        {tags_html}
+                        {keywords_html}
                     </div>
                     """
                 )
@@ -1836,23 +3046,76 @@ def render_idea_cards(ideas: list[Idea], niche: str, *, platform: str) -> None:
 
 def render_paywall(context: str = "generate") -> None:
     generate = context == "generate"
-    headline = t("pay.generate_headline" if generate else "pay.evaluate_headline", price=PRICE_LABEL)
-    cta = t("pay.cta_generate" if generate else "pay.cta_evaluate")
-    benefits = "\n".join(f"<li>{html_escape(t(f'pay.b{index}'))}</li>" for index in range(1, 7))
+    headline = "اشترك الآن واحصل على الوصول الكامل إلى جميع الأدوات" if generate else "ارتقِ حسابك للحصول على تقييمات متقدمة"
+
     render_html(
         f"""
-        <div class="ts-paywall">
-            <div class="ts-paywall-inner">
-                <div class="lock">🔒</div>
+        <div class="ts-pricing-section">
+            <div class="ts-pricing-header">
                 <h2>{html_escape(headline)}</h2>
-                <div class="price">{html_escape(PRICE_LABEL)} — {html_escape(t("pay.price_suffix"))}</div>
-                <ul>
-                    {benefits}
-                </ul>
-                <a class="ts-cta" href="{CHECKOUT_URL}" target="_blank" rel="noopener">
-                    {html_escape(cta)}
-                </a>
-                <div class="ts-fine">{html_escape(t("pay.fine"))}</div>
+                <p>اختر الخطة المناسبة لاحتياجاتك</p>
+            </div>
+
+            <div class="ts-pricing-grid">
+                <!-- Free Plan -->
+                <div class="ts-pricing-card free">
+                    <div class="ts-pricing-badge">مجاني</div>
+                    <h3>البداية</h3>
+                    <div class="ts-price">$0 <span>/ شهر</span></div>
+                    <ul class="ts-features">
+                        <li>✓ 3 أفكار يومياً</li>
+                        <li>✓ التوليد الأساسي</li>
+                        <li>✓ دعم الفيديو الطويل</li>
+                        <li>✓ هاشتاغات أساسية</li>
+                        <li>✓ كلمات مفتاحية بسيطة</li>
+                        <li class="disabled">✗ سكريبت مفصل</li>
+                        <li class="disabled">✗ المقيّم الذكي</li>
+                        <li class="disabled">✗ تحسين SEO متقدم</li>
+                    </ul>
+                    <a class="ts-pricing-btn" href="#" onclick="return false;">الخطة الحالية</a>
+                </div>
+
+                <!-- Pro Plan -->
+                <div class="ts-pricing-card pro featured">
+                    <div class="ts-pricing-badge popular">الأكثر شعبية</div>
+                    <h3>الاحترافي</h3>
+                    <div class="ts-price">$9.99 <span>/ شهر</span></div>
+                    <ul class="ts-features">
+                        <li>✓ 50 فكرة يومياً</li>
+                        <li>✓ توليد متقدم مع AI</li>
+                        <li>✓ دعم جميع المنصات</li>
+                        <li>✓ كاتب السكريبت الذكي</li>
+                        <li>✓ سكريبت مفصل بـ timestamps</li>
+                        <li>✓ هاشتاغات متخصصة</li>
+                        <li>✓ كلمات مفتاحية SEO</li>
+                        <li>✓ المقيّم الذكي</li>
+                        <li>✓ تحسين SEO متقدم</li>
+                    </ul>
+                    <a class="ts-pricing-btn primary" href="{CHECKOUT_URL}" target="_blank" rel="noopener">اشترك الآن</a>
+                </div>
+
+                <!-- Enterprise Plan -->
+                <div class="ts-pricing-card enterprise">
+                    <div class="ts-pricing-badge">مميز</div>
+                    <h3>الذهبي</h3>
+                    <div class="ts-price">$19.99 <span>/ شهر</span></div>
+                    <ul class="ts-features">
+                        <li>✓ أفكار غير محدودة</li>
+                        <li>✓ توليد AI متقدم جداً</li>
+                        <li>✓ سكريبتات غير محدودة</li>
+                        <li>✓ دعم أولوية 24/7</li>
+                        <li>✓ API Access كامل</li>
+                        <li>✓ تقارير أداء مفصلة</li>
+                        <li>✓ حساب مدير للفريق</li>
+                        <li>✓ استشارات المحتوى</li>
+                        <li>✓ تحليل المنافسين</li>
+                    </ul>
+                    <a class="ts-pricing-btn" href="{CHECKOUT_URL}" target="_blank" rel="noopener">اشترك الآن</a>
+                </div>
+            </div>
+
+            <div class="ts-pricing-footer">
+                <p>💡 يمكنك إلغاء الاشتراك في أي وقت • دفع آمن عبر Stripe • ضمان استرجاع 7 أيام</p>
             </div>
         </div>
         """
@@ -1931,19 +3194,21 @@ def render_footer() -> None:
     credit = "footer.copy" if groq_is_ready() else "footer.copy_fallback"
     render_html(
         f"""
-        <div class="ts-promo">
-            <h3>{html_escape(t("footer.title"))}</h3>
-            <div class="ts-promo-grid">
-                <a class="ts-promo-item" href="{TITLE_SEO_URL}" target="_blank" rel="noopener">
-                    <span>{html_escape(t("footer.tool1"))}</span>
-                    <span><span class="price-tag">2.99$</span> <span class="arrow">{arrow}</span></span>
-                </a>
-                <a class="ts-promo-item" href="{AUTO_SUBTITLE_URL}" target="_blank" rel="noopener">
-                    <span>{html_escape(t("footer.tool2"))}</span>
-                    <span><span class="price-tag">4.99$</span> <span class="arrow">{arrow}</span></span>
-                </a>
+        <div class="ts-footer">
+            <div class="ts-footer-content">
+                <div class="ts-footer-brand">
+                    <h3>⚡ TubeSpark</h3>
+                    <p>مُولّد أفكار يوتيوب الذكي</p>
+                </div>
+                <div class="ts-footer-links">
+                    <a href="#" target="_blank">الشروط والأحكام</a>
+                    <a href="#" target="_blank">سياسة الخصوصية</a>
+                    <a href="#" target="_blank">الدعم الفني</a>
+                </div>
             </div>
-            <div class="ts-copy">{html_escape(t(credit))}</div>
+            <div class="ts-footer-bottom">
+                <p>{html_escape(t(credit))}</p>
+            </div>
         </div>
         """
     )
@@ -1957,17 +3222,34 @@ def render_footer() -> None:
 def render_generator_tab() -> None:
     lang = current_lang()
 
-    col_niche, col_vibe = st.columns([2, 1], gap="small")
+    # Main input container
+    render_html('<div class="ts-input-container">')
 
-    with col_niche:
+    # Niche input - full width
+    render_html(
+        f'<div class="ts-field-label">{html_escape(t("gen.niche_label"))}</div>'
+    )
+    niche = st.text_input(
+        t("gen.niche_label"),
+        key="niche",
+        placeholder=t("gen.niche_placeholder"),
+        label_visibility="collapsed",
+    )
+
+    # Settings row
+    col_platform, col_vibe, col_audience = st.columns([1, 1, 1], gap="medium")
+
+    with col_platform:
         render_html(
-            f'<div class="ts-field-label">{html_escape(t("gen.niche_label"))}</div>'
+            f'<div class="ts-field-label">{html_escape(t("gen.platform_label"))}</div>'
         )
-        niche = st.text_input(
-            t("gen.niche_label"),
-            key="niche",
-            placeholder=t("gen.niche_placeholder"),
+        platform = st.selectbox(
+            t("gen.platform_label"),
+            options=list(PLATFORM_KEYS),
+            format_func=option_formatter("platform", lang),
+            key="platform",
             label_visibility="collapsed",
+            on_change=_regenerate_on_mode_change,
         )
 
     with col_vibe:
@@ -1979,21 +3261,6 @@ def render_generator_tab() -> None:
             options=list(VIBE_KEYS),
             format_func=option_formatter("vibe", lang),
             key="video_vibe",
-            label_visibility="collapsed",
-            on_change=_regenerate_on_mode_change,
-        )
-
-    col_platform, col_audience = st.columns(2, gap="small")
-
-    with col_platform:
-        render_html(
-            f'<div class="ts-field-label">{html_escape(t("gen.platform_label"))}</div>'
-        )
-        platform = st.selectbox(
-            t("gen.platform_label"),
-            options=list(PLATFORM_KEYS),
-            format_func=option_formatter("platform", lang),
-            key="platform",
             label_visibility="collapsed",
             on_change=_regenerate_on_mode_change,
         )
@@ -2011,7 +3278,11 @@ def render_generator_tab() -> None:
             on_change=_regenerate_on_mode_change,
         )
 
-    if st.button(t("gen.generate_btn"), type="primary", width="stretch", icon=":material/bolt:"):
+    render_html('</div>')
+
+    # Generate button - centered
+    st.markdown('<div style="text-align: center; margin: 2rem 0;">', unsafe_allow_html=True)
+    if st.button(t("gen.generate_btn"), type="primary", icon=":material/bolt:"):
         clean_niche = niche.strip()
         if not clean_niche:
             st.warning(t("gen.empty_niche_warning"))
@@ -2028,10 +3299,12 @@ def render_generator_tab() -> None:
                 )
             st.session_state["ideas_niche"] = clean_niche
             st.session_state["variant"] = 0
+    st.markdown('</div>', unsafe_allow_html=True)
 
     render_ai_error()
     render_social_proof()
 
+    # Quick niche pills
     render_html(
         f'<div class="ts-chips-label">{html_escape(t("gen.chips_label"))}</div>'
     )
@@ -2126,26 +3399,150 @@ def render_evaluate_tab() -> None:
 def render_script_tab() -> None:
     lang = current_lang()
     render_html(
-        f'<div class="ts-section"><h2>{html_escape(t("tab.script"))}</h2>'
-        f'<span class="mode long">{html_escape(t("gen.mode_long"))}</span></div>'
+        f'<div class="ts-section"><h2>📝 كاتب السكريبت الذكي</h2>'
+        f'<span class="mode long">سكريبت مفصل مع SEO كامل</span></div>'
     )
-    script_idea = st.text_area(
-        t("gen.niche_label"),
-        key="script_idea",
-        placeholder="Paste your idea here to generate a ready-to-shoot script...",
-        height=160,
+
+    # Input container
+    render_html('<div class="ts-input-container">')
+
+    render_html(
+        f'<div class="ts-field-label">مجال الفيديو</div>'
+    )
+    niche = st.text_input(
+        "مجال الفيديو",
+        key="script_niche",
+        placeholder="مثال: تداول، ألعاب، طبخ",
         label_visibility="collapsed",
     )
-    if st.button(t("tab.script"), type="primary", width="stretch"):
-        if not script_idea.strip():
-            st.warning(t("eval.empty_warning"))
+
+    render_html(
+        f'<div class="ts-field-label">الفكرة الأساسية</div>'
+    )
+    script_idea = st.text_area(
+        "الفكرة الأساسية",
+        key="script_idea",
+        placeholder="اكتب فكرتك هنا ليقوم AI بكتابة سكريبت مفصل...",
+        height=120,
+        label_visibility="collapsed",
+    )
+
+    # Settings
+    col_platform, col_vibe, col_audience = st.columns([1, 1, 1], gap="medium")
+
+    with col_platform:
+        render_html(
+            f'<div class="ts-field-label">المنصة</div>'
+        )
+        platform = st.selectbox(
+            "المنصة",
+            options=list(PLATFORM_KEYS),
+            format_func=option_formatter("platform", lang),
+            key="script_platform",
+            label_visibility="collapsed",
+        )
+
+    with col_vibe:
+        render_html(
+            f'<div class="ts-field-label">النبرة</div>'
+        )
+        vibe = st.selectbox(
+            "النبرة",
+            options=list(VIBE_KEYS),
+            format_func=option_formatter("vibe", lang),
+            key="script_vibe",
+            label_visibility="collapsed",
+        )
+
+    with col_audience:
+        render_html(
+            f'<div class="ts-field-label">الجمهور</div>'
+        )
+        audience = st.selectbox(
+            "الجمهور",
+            options=list(AUDIENCE_KEYS),
+            format_func=option_formatter("audience", lang),
+            key="script_audience",
+            label_visibility="collapsed",
+        )
+
+    render_html('</div>')
+
+    # Generate button
+    st.markdown('<div style="text-align: center; margin: 2rem 0;">', unsafe_allow_html=True)
+    if st.button("⚡ توليد السكريبت المفصل", type="primary", icon=":material/article:"):
+        clean_niche = niche.strip()
+        clean_idea = script_idea.strip()
+        if not clean_niche or not clean_idea:
+            st.warning("الرجاء إدخال المجال والفكرة")
         else:
-            with st.spinner(t("ai.thinking")):
-                st.session_state["script_result"] = script_idea.strip()
+            with st.spinner("جاري كتابة السكريبت المفصل..."):
+                try:
+                    script = _script_from_groq(
+                        clean_niche,
+                        clean_idea,
+                        platform=platform,
+                        vibe=vibe,
+                        audience=audience,
+                        lang=lang,
+                    )
+                    st.session_state["script_result"] = script
+                except Exception as e:
+                    st.error(f"حدث خطأ: {str(e)}")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Display result
     result = st.session_state.get("script_result")
     if result:
-        st.markdown(f"### {html_escape(t('clip.hook'))}")
-        st.markdown(result)
+        render_html(
+            f"""
+            <div class="ts-script-result">
+                <div class="ts-script-header">
+                    <h3>📄 السكريبت المفصل</h3>
+                </div>
+                <div class="ts-script-meta">
+                    <div class="ts-meta-item">
+                        <span class="label">العنوان:</span>
+                        <span class="value">{html_escape(result.title)}</span>
+                    </div>
+                    <div class="ts-meta-item">
+                        <span class="label">الوصف:</span>
+                        <span class="value">{html_escape(result.description)}</span>
+                    </div>
+                </div>
+                <div class="ts-script-tags">
+                    <span class="badge">الهاشتاغات</span>
+                    <div class="tags-list">
+                        {" ".join(f"<span class='tag'>#{html_escape(tag)}</span>" for tag in result.hashtags)}
+                    </div>
+                </div>
+                <div class="ts-script-keywords">
+                    <span class="badge">كلمات مفتاحية</span>
+                    <div class="keywords-list">
+                        {", ".join(html_escape(kw) for kw in result.keywords)}
+                    </div>
+                </div>
+                <div class="ts-script-sections">
+                    <h4>🎬 أقسام السكريبت</h4>
+            """
+        )
+
+        for section in result.sections:
+            render_html(
+                f"""
+                <div class="ts-script-section">
+                    <div class="ts-section-header">
+                        <span class="name">{html_escape(section['name'])}</span>
+                        <span class="time">{html_escape(section['time'])}</span>
+                    </div>
+                    <div class="ts-section-content">{html_escape(section['content'])}</div>
+                    {f'<div class="ts-section-notes">📌 {html_escape(section["notes"])}</div>' if section['notes'] else ''}
+                </div>
+                """
+            )
+
+        render_html('</div></div>')
+
     render_paywall("generate")
 
 
@@ -2209,49 +3606,112 @@ def main() -> None:
         layout="wide",
     )
 
-    inject_styles()
+    # Force dark theme styles immediately
     st.markdown(
-        '<style>[data-testid="stSidebar"]{background-color:#0F172A!important;color:#F8FAFC;}[data-testid="stSidebar"] label,[data-testid="stSidebar"] div,[data-testid="stSidebar"] p,[data-testid="stSidebar"] span{color:#F8FAFC!important;}</style>',
+        """
+        <style>
+        /* Force dark background */
+        .stApp {
+            background: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F172A 100%) !important;
+            background-attachment: fixed !important;
+        }
+
+        /* Hide sidebar */
+        [data-testid="stSidebar"] {
+            display: none !important;
+        }
+
+        /* Force text colors */
+        h1, h2, h3, h4, h5, h6, p, span, div, label {
+            color: #F1F5F9 !important;
+        }
+
+        /* Override Streamlit inputs */
+        .stTextInput > div > div > input,
+        .stSelectbox > div > div > select,
+        .stTextArea > div > div > textarea {
+            background: rgba(30, 41, 59, 0.9) !important;
+            color: #F1F5F9 !important;
+            border: 1px solid rgba(139, 92, 246, 0.4) !important;
+            border-radius: 12px !important;
+        }
+
+        /* Override buttons */
+        .stButton > button {
+            background: linear-gradient(135deg, #8B5CF6, #EC4899) !important;
+            color: white !important;
+            border-radius: 50px !important;
+            border: none !important;
+            box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4) !important;
+        }
+
+        /* Override tabs - Full width */
+        [data-testid="stTabs"] {
+            background: rgba(30, 41, 59, 0.6) !important;
+            border-radius: 16px !important;
+            border: 1px solid rgba(139, 92, 246, 0.3) !important;
+            padding: 0.5rem !important;
+            margin-bottom: 2rem !important;
+        }
+
+        [data-testid="stTabs"] [role="tablist"] {
+            display: flex !important;
+            justify-content: space-around !important;
+            width: 100% !important;
+            gap: 0.5rem !important;
+        }
+
+        [data-testid="stTabs"] [role="tab"] {
+            background: rgba(30, 41, 59, 0.8) !important;
+            color: #F1F5F9 !important;
+            flex: 1 !important;
+            text-align: center !important;
+            padding: 1rem !important;
+            border-radius: 12px !important;
+            font-weight: 700 !important;
+            transition: all 0.3s ease !important;
+        }
+
+        [data-testid="stTabs"] [role="tab"]:hover {
+            background: rgba(139, 92, 246, 0.3) !important;
+            transform: translateY(-2px) !important;
+        }
+
+        [data-testid="stTabs"] [role="tab"][aria-selected="true"] {
+            background: linear-gradient(135deg, #8B5CF6, #A855F7) !important;
+            color: white !important;
+            box-shadow: 0 4px 20px rgba(139, 92, 246, 0.4) !important;
+        }
+
+        /* Full width container */
+        .block-container {
+            max-width: 100% !important;
+            padding-left: 2rem !important;
+            padding-right: 2rem !important;
+        }
+        </style>
+        """,
         unsafe_allow_html=True,
     )
 
-    with st.sidebar:
-        st.title("⚡ TubeSpark")
-        st.caption("مُولّد أفكار يوتيوب الذكي")
-        lang = current_lang()
-        st.markdown("**الإعدادات**")
-        vibe = st.selectbox(
-            t("gen.vibe_label"),
-            options=list(VIBE_KEYS),
-            format_func=option_formatter("vibe", lang),
-            key="video_vibe",
-            on_change=_regenerate_on_mode_change,
-        )
-        audience = st.selectbox(
-            t("gen.audience_label"),
-            options=list(AUDIENCE_KEYS),
-            format_func=option_formatter("audience", lang),
-            key="audience",
-            on_change=_regenerate_on_mode_change,
-        )
-        platform = st.selectbox(
-            t("gen.platform_label"),
-            options=list(PLATFORM_KEYS),
-            format_func=option_formatter("platform", lang),
-            key="platform",
-            on_change=_regenerate_on_mode_change,
-        )
-        st.divider()
-        st.markdown("**اللغة**")
-        # keep language switcher behavior via pills? but simpler: reuse render_language_switcher? call inside sidebar is fine
-        render_language_switcher()
+    inject_styles()
 
+    # Language switcher at top
+    st.markdown('<div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">', unsafe_allow_html=True)
+    render_language_switcher()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Hero section
+    render_hero()
+
+    # Main tabs - distributed evenly
     tab_ideas, tab_script, tab_analyze, tab_seo = st.tabs([
         "💡 توليد الأفكار",
         "📝 كاتب السكريبت",
         "🎯 المقيّم الذكي",
         "🚀 تحسين السيو",
     ])
+
     with tab_ideas:
         render_generator_tab()
     with tab_script:
