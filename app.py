@@ -199,6 +199,14 @@ class Script:
     sections: tuple[dict[str, str], ...]
 
 
+@dataclass(frozen=True)
+class SEOData:
+    thumbnail_texts: tuple[str, ...]
+    seo_titles: tuple[str, ...]
+    clickbait_titles: tuple[str, ...]
+    chapters: tuple[str, ...]
+
+
 # --------------------------------------------------------------------------------------
 # Groq backend: live idea generation and evaluation
 # --------------------------------------------------------------------------------------
@@ -620,13 +628,19 @@ Rate this idea, rewrite it stronger, and return the JSON object described in the
 prompt."""
 
 
-def _script_system_prompt(lang: str, short_form: bool) -> str:
+def _script_system_prompt(lang: str, short_form: bool, duration: str = "8-12 minutes") -> str:
     rules = AI_LANGUAGE_RULES.get(lang, AI_LANGUAGE_RULES[DEFAULT_LANGUAGE])
-    duration_guide = (
-        "60 seconds maximum - every second must count"
-        if short_form
-        else "8-12 minutes with clear beginning, middle, and end"
-    )
+
+    # Duration-specific guidance
+    duration_rules = {
+        "shorts": "60 seconds maximum - every second must count. Maximum 150 words total.",
+        "3-5min": "3-5 minutes - concise but complete. 400-600 words total.",
+        "8-10min": "8-10 minutes with clear structure. 1000-1300 words total.",
+        "15min+": "15+ minutes for deep dive content. 1500+ words total with detailed examples."
+    }
+
+    duration_guide = duration_rules.get(duration, "8-12 minutes with clear beginning, middle, and end")
+
     return f"""You are a professional YouTube scriptwriter with 20+ years of experience in
 high-retention content creation. You write scripts that hook viewers instantly, maintain
 engagement throughout, and drive action.
@@ -649,10 +663,19 @@ FIELDS
   - "notes": specific production notes (camera angles, B-roll suggestions, transitions)
 
 SCRIPT STRUCTURE
-For long-form videos: Hook (0:00-0:30) → Intro (0:30-1:00) → Main Content (3-4 sections)
+Target duration: {duration}
+Word count guidance: {duration_guide}
+
+For short-form (Shorts): Hook (0:00-0:03) → Quick Value (0:03-0:40) → CTA (0:40-0:60)
+
+For 3-5 minute videos: Hook (0:00-0:20) → Quick Intro (0:20-0:45) → Main Point (2 sections)
+→ Quick Summary → CTA
+
+For 8-10 minute videos: Hook (0:00-0:30) → Intro (0:30-1:00) → Main Content (3-4 sections)
 → Key Takeaway → CTA → Outro
 
-For short-form: Hook (0:00-0:03) → Quick Value (0:03-0:40) → CTA (0:40-0:60)
+For 15+ minute videos: Hook (0:00-0:45) → Deep Intro (0:45-1:30) → Main Content (5-6 sections)
+with examples → Detailed Analysis → Multiple Takeaways → CTA → Outro
 
 ENGAGEMENT RULES
 - Every 30-60 seconds, include a pattern interrupt (question, visual change, stat)
@@ -674,7 +697,7 @@ SEO OPTIMIZATION
 - Keywords should match actual search intent
 
 RULES
-- Target duration: {duration_guide}
+- Target duration: {duration}
 - Write in conversational, engaging tone
 - No filler words - every line must earn its place
 - Include specific numbers, examples, or comparisons
@@ -708,20 +731,145 @@ def _script_user_prompt(
     vibe: str,
     audience: str,
     lang: str,
+    duration: str = "8-10min",
 ) -> str:
     return f"""VIDEO BRIEF
 - Topic / niche: {niche}
 - Core idea: {idea}
 - Platform: {option_label("platform", platform, lang)}
 - Video format: {t_for(lang, "gen.mode_short") if is_short_form(platform) else t_for(lang, "gen.mode_long")}
+- Target duration: {duration}
 - Tone and angle: {option_label("vibe", vibe, lang)}
 - Target audience: {option_label("audience", audience, lang)}
 
 Write a complete, production-ready script that a creator can film immediately.
 Focus on high retention, engagement, and SEO optimization.
+Adjust word count and section depth to match the target duration exactly.
 
 The brief is written in English; write the content in the language demanded by the system
 prompt."""
+
+
+def _seo_system_prompt(lang: str) -> str:
+    rules = AI_LANGUAGE_RULES.get(lang, AI_LANGUAGE_RULES[DEFAULT_LANGUAGE])
+    return f"""You are an expert YouTube SEO specialist with 15+ years of experience in
+content optimization, thumbnail design, and audience engagement. You know exactly what
+makes videos rank and get clicked.
+
+You always answer with valid JSON and nothing else: no markdown, no code fences, no
+explanation before or after the object.
+
+FIELDS
+- "thumbnail_texts": an array of 5-8 very short, punchy phrases (2-4 words each) for
+  thumbnail overlays. These must be:
+  * Extremely readable in thumbnail size
+  * High-contrast and attention-grabbing
+  * Value-promising or curiosity-inducing
+  * Number-driven when possible (e.g., "5 Tips", "3 Mistakes")
+  * Action-oriented (e.g., "Try This", "Stop Now")
+
+- "seo_titles": an array of 3 search-optimized titles that:
+  * Include the main keyword naturally
+  * Are 50-70 characters ideal (max 100)
+  * Answer specific search intent
+  * Use proven SEO patterns (How-to, List, Guide, Tutorial)
+  * Are click-worthy but not clickbait
+  * Include numbers when relevant
+
+- "clickbait_titles": an array of 3 curiosity-driven titles that:
+  * Create strong curiosity gaps
+  * Use emotional triggers (fear, surprise, curiosity)
+  * Are 50-70 characters ideal (max 100)
+  * Use "secrets nobody tells you" patterns
+  * Include bold claims or comparisons
+  * Are designed for high CTR but maintain credibility
+
+- "chapters": an array of 5-8 timestamped chapter entries for the video description.
+  Each entry should be a concise 2-6 word description of a major section with its
+  approximate timestamp (e.g., "0:00 - Hook", "1:30 - Main Point").
+
+RULES
+- All text must be in the language demanded by the system prompt
+- Thumbnail texts must be ultra-short (2-4 words max)
+- SEO titles must include the main keyword
+- Clickbait titles must be curiosity-driven but not misleading
+- Chapters should follow logical video progression
+- {rules}
+
+OUTPUT
+Reply with one valid JSON object using exactly this shape:
+
+{{
+  "thumbnail_texts": ["...", "..."],
+  "seo_titles": ["...", "..."],
+  "clickbait_titles": ["...", "..."],
+  "chapters": ["...", "..."]
+}}"""
+
+
+def _seo_user_prompt(
+    topic: str,
+    niche: str,
+    *,
+    lang: str,
+) -> str:
+    return f"""VIDEO SEO BRIEF
+- Video topic: {topic}
+- Niche / category: {niche}
+
+Generate comprehensive SEO optimization including thumbnail text, titles, and chapters.
+Focus on high search visibility and click-through rate.
+
+The brief is written in English; write the content in the language demanded by the system
+prompt."""
+
+
+def _seo_from_groq(
+    topic: str,
+    niche: str,
+    *,
+    lang: str,
+) -> SEOData:
+    data = _groq_json(
+        _seo_system_prompt(lang),
+        _seo_user_prompt(topic, niche, lang=lang),
+        temperature=0.8,
+    )
+
+    raw_thumbnail = data.get("thumbnail_texts")
+    thumbnail_texts = (
+        tuple(_model_text(txt, 30) for txt in raw_thumbnail if _model_text(txt))[:8]
+        if isinstance(raw_thumbnail, list)
+        else ()
+    )
+
+    raw_seo = data.get("seo_titles")
+    seo_titles = (
+        tuple(_model_text(title, 100) for title in raw_seo if _model_text(title))[:3]
+        if isinstance(raw_seo, list)
+        else ()
+    )
+
+    raw_clickbait = data.get("clickbait_titles")
+    clickbait_titles = (
+        tuple(_model_text(title, 100) for title in raw_clickbait if _model_text(title))[:3]
+        if isinstance(raw_clickbait, list)
+        else ()
+    )
+
+    raw_chapters = data.get("chapters")
+    chapters = (
+        tuple(_model_text(chapter, 100) for chapter in raw_chapters if _model_text(chapter))[:8]
+        if isinstance(raw_chapters, list)
+        else ()
+    )
+
+    return SEOData(
+        thumbnail_texts=thumbnail_texts,
+        seo_titles=seo_titles,
+        clickbait_titles=clickbait_titles,
+        chapters=chapters,
+    )
 
 
 def _ideas_from_groq(
@@ -800,9 +948,10 @@ def _script_from_groq(
     vibe: str,
     audience: str,
     lang: str,
+    duration: str = "8-10min",
 ) -> Script:
     data = _groq_json(
-        _script_system_prompt(lang, short_form=is_short_form(platform)),
+        _script_system_prompt(lang, short_form=is_short_form(platform), duration=duration),
         _script_user_prompt(
             niche,
             idea,
@@ -810,6 +959,7 @@ def _script_from_groq(
             vibe=vibe,
             audience=audience,
             lang=lang,
+            duration=duration,
         ),
         temperature=0.7,
     )
@@ -2451,6 +2601,119 @@ div.stButton > button:hover {
     font-style: italic;
 }
 
+/* SEO Result Styles */
+.ts-seo-result {
+    background: var(--card-bg);
+    border: 2px solid var(--card-border);
+    border-radius: 20px;
+    padding: 2rem;
+    margin-top: 2rem;
+    backdrop-filter: blur(20px);
+}
+
+.ts-seo-header {
+    text-align: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--card-border);
+}
+
+.ts-seo-header h3 {
+    font-size: 1.8rem;
+    font-weight: 800;
+    margin: 0;
+    color: var(--ink);
+}
+
+.ts-seo-section {
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: rgba(30, 41, 59, 0.4);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+}
+
+.ts-seo-section h4 {
+    font-size: 1.2rem;
+    font-weight: 800;
+    margin: 0 0 1rem;
+    color: var(--accent);
+}
+
+.ts-seo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+}
+
+.ts-seo-item {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(168, 85, 247, 0.2));
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: 12px;
+    padding: 1rem;
+    text-align: center;
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+}
+
+.ts-seo-item:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(139, 92, 246, 0.3);
+}
+
+.ts-seo-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+}
+
+.ts-seo-list-item {
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 1rem;
+    font-size: 0.95rem;
+    color: var(--ink);
+    transition: all 0.3s ease;
+}
+
+.ts-seo-list-item.seo {
+    border-left: 4px solid #22C55E;
+}
+
+.ts-seo-list-item.clickbait {
+    border-left: 4px solid #F59E0B;
+}
+
+.ts-seo-list-item:hover {
+    transform: translateX(5px);
+    border-color: var(--accent);
+}
+
+.ts-seo-chapters {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.ts-chapter-item {
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 8px;
+    padding: 0.8rem 1rem;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    color: var(--ink);
+    transition: all 0.3s ease;
+}
+
+.ts-chapter-item:hover {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: #3B82F6;
+}
+
 /* Footer */
 .ts-footer {
     margin-top: 4rem;
@@ -3498,6 +3761,24 @@ def render_script_tab() -> None:
             label_visibility="collapsed",
         )
 
+    # Duration selector
+    render_html(
+        f'<div class="ts-field-label">المدة المستهدفة للفيديو</div>'
+    )
+    duration_options = {
+        "shorts": "أقل من دقيقة (Shorts)",
+        "3-5min": "من 3 إلى 5 دقائق",
+        "8-10min": "من 8 إلى 10 دقائق",
+        "15min+": "أكثر من 15 دقيقة"
+    }
+    duration = st.selectbox(
+        "المدة المستهدفة",
+        options=list(duration_options.keys()),
+        format_func=lambda x: duration_options[x],
+        key="script_duration",
+        label_visibility="collapsed",
+    )
+
     render_html('</div>')
 
     # Generate button
@@ -3517,6 +3798,7 @@ def render_script_tab() -> None:
                         vibe=vibe,
                         audience=audience,
                         lang=lang,
+                        duration=duration,
                     )
                     st.session_state["script_result"] = script
                 except Exception as e:
@@ -3608,25 +3890,96 @@ def render_analyze_tab() -> None:
 def render_seo_tab() -> None:
     lang = current_lang()
     render_html(
-        f'<div class="ts-section"><h2>{html_escape(t("tab.seo"))}</h2>'
-        f'<span class="mode long">{html_escape(t("page.title"))}</span></div>'
+        f'<div class="ts-section"><h2>🚀 محسن السيو الشامل</h2>'
+        f'<span class="mode long">تحسين كامل للظهور والنقر</span></div>'
+    )
+
+    # Input container
+    render_html('<div class="ts-input-container">')
+
+    render_html(
+        f'<div class="ts-field-label">موضوع الفيديو</div>'
     )
     video_topic = st.text_input(
-        t("gen.niche_label"),
+        "موضوع الفيديو",
         key="seo_topic",
-        placeholder="Enter your video title or topic...",
+        placeholder="مثال: كيف تبدأ في تداول العملات الرقمية",
         label_visibility="collapsed",
     )
-    if st.button(t("tab.seo"), type="primary", width="stretch"):
-        if not video_topic.strip():
-            st.warning(t("eval.empty_warning"))
+
+    render_html(
+        f'<div class="ts-field-label">المجال / التصنيف</div>'
+    )
+    video_niche = st.text_input(
+        "المجال / التصنيف",
+        key="seo_niche",
+        placeholder="مثال: تداول، تعليم، تكنولوجيا",
+        label_visibility="collapsed",
+    )
+
+    render_html('</div>')
+
+    # Generate button
+    st.markdown('<div style="text-align: center; margin: 2rem 0;">', unsafe_allow_html=True)
+    if st.button("⚡ تحسين السيو بالكامل", type="primary", icon=":material/trending_up:"):
+        clean_topic = video_topic.strip()
+        clean_niche = video_niche.strip()
+        if not clean_topic or not clean_niche:
+            st.warning("الرجاء إدخال الموضوع والمجال")
         else:
-            with st.spinner(t("ai.thinking")):
-                st.session_state["seo_result"] = video_topic.strip()
+            with st.spinner("جاري تحسين السيو..."):
+                try:
+                    seo_data = _seo_from_groq(
+                        clean_topic,
+                        clean_niche,
+                        lang=lang,
+                    )
+                    st.session_state["seo_result"] = seo_data
+                except Exception as e:
+                    st.error(f"حدث خطأ: {str(e)}")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Display result
     result = st.session_state.get("seo_result")
     if result:
-        st.markdown(f"### {html_escape(result)}")
-        st.markdown("- Description: Ready-to-paste\n- Keywords: #content #creator")
+        render_html(
+            f"""
+            <div class="ts-seo-result">
+                <div class="ts-seo-header">
+                    <h3>📊 نتائج تحسين السيو</h3>
+                </div>
+
+                <div class="ts-seo-section">
+                    <h4>🖼️ نصوص الصورة المصغرة (Thumbnail Text)</h4>
+                    <div class="ts-seo-grid">
+                        {" ".join(f"<div class='ts-seo-item'>{html_escape(txt)}</div>" for txt in result.thumbnail_texts)}
+                    </div>
+                </div>
+
+                <div class="ts-seo-section">
+                    <h4>🔍 عناوين متوافقة مع SEO</h4>
+                    <div class="ts-seo-list">
+                        {"".join(f"<div class='ts-seo-list-item seo'>{html_escape(title)}</div>" for title in result.seo_titles)}
+                    </div>
+                </div>
+
+                <div class="ts-seo-section">
+                    <h4>⚡ عناوين Clickbait (إثارة الفضول)</h4>
+                    <div class="ts-seo-list">
+                        {"".join(f"<div class='ts-seo-list-item clickbait'>{html_escape(title)}</div>" for title in result.clickbait_titles)}
+                    </div>
+                </div>
+
+                <div class="ts-seo-section">
+                    <h4>📑 الفصول الزمنية الجاهزة (Chapters)</h4>
+                    <div class="ts-seo-chapters">
+                        {"".join(f"<div class='ts-chapter-item'>{html_escape(chapter)}</div>" for chapter in result.chapters)}
+                    </div>
+                </div>
+            </div>
+            """
+        )
+
     render_paywall("generate")
 
 
@@ -3646,6 +3999,13 @@ def main() -> None:
         .stApp {
             background: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F172A 100%) !important;
             background-attachment: fixed !important;
+        }
+
+        /* Hide header completely */
+        header {
+            visibility: hidden !important;
+            height: 0 !important;
+            padding: 0 !important;
         }
 
         /* Hide sidebar */
@@ -3713,6 +4073,16 @@ def main() -> None:
             background: linear-gradient(135deg, #8B5CF6, #A855F7) !important;
             color: white !important;
             box-shadow: 0 4px 20px rgba(139, 92, 246, 0.4) !important;
+        }
+
+        /* Language pills - fix text color */
+        [data-testid="stPills"] button {
+            color: #1E293B !important;
+            font-weight: 700 !important;
+        }
+
+        [data-testid="stPills"] button[kind="primary"] {
+            color: #FFFFFF !important;
         }
 
         /* Full width container */
