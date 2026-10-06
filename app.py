@@ -185,6 +185,7 @@ class Idea:
     title: str
     hook: str
     value: str
+    steps: tuple[str, ...] = ()
 
 
 # --------------------------------------------------------------------------------------
@@ -463,9 +464,21 @@ explanation before or after the object.
 FIELDS
 - "title": one punchy line, max 90 characters, specific and honest, no hashtags, no channel
   names, no fake promises.
-- "hook": what happens in the first two seconds, one or two concrete sentences a viewer can
-  picture immediately.
-- "value": why the idea works and what the viewer walks away with, one or two sentences.
+- "hook": the full opening, not a summary. Describe the exact first two seconds shot by
+  shot: what the camera sees, the on-screen text or number, and the line the creator says.
+  Three to four concrete sentences a viewer can picture immediately.
+- "value": the payoff in detail. What the viewer learns or can do after watching, why this
+  angle beats the obvious one, and what makes them stay to the end. Three to four concrete
+  sentences.
+- "steps": an array with exactly three execution steps, each one a short instruction the
+  creator can follow with a phone: the shot to film, the line to say, and the asset or
+  screen to record.
+
+DEPTH
+- Every idea must be substantial enough to film this week. No thin concepts.
+- Prefer a real number, a real tool, a real mistake or a real comparison over a general
+  claim. Give the specifics a viewer would screenshot.
+- The hook must open on the payoff or the tension, never on an introduction.
 
 RULES
 - Return exactly {count} ideas, each one a single shootable video.
@@ -478,7 +491,7 @@ OUTPUT
 Reply with one valid JSON object using exactly this shape, with exactly {count} items in
 the "ideas" array:
 
-{{"ideas": [{{"title": "...", "hook": "...", "value": "..."}}]}}"""
+{{"ideas": [{{"title": "...", "hook": "...", "value": "...", "steps": ["...", "...", "..."]}}]}}"""
 
 
 def _idea_user_prompt(
@@ -518,16 +531,30 @@ You always answer with valid JSON and nothing else: no markdown, no code fences,
 explanation before or after the object.
 
 FIELDS
-- "score": integer 0-100, how strong the idea is as written. Judge the hook strength in the
-  first two seconds, the curiosity gap, the specificity, the clarity of the target audience
-  and how easy it is to produce. Be honest and use the whole range.
+- "score": integer 0-100, how strong the idea is as written. Judge only the idea in front of
+  you: the strength of the first two seconds, the curiosity gap, the specificity, how clear
+  the target audience is, and how easy it is to produce.
+
+  Use this rubric:
+  - 90-95: exceptional. A specific hook, a concrete payoff and a clear audience, already
+    structured and shootable.
+  - 85-89: strong. Everything important is there, with one small gap.
+  - 70-84: good bones, but a vague hook, a thin payoff or an unclear audience.
+  - 50-69: promising subject, weak execution.
+  - below 50: unusable as written.
+
+  Judge on the merits, never to seem tough or to leave room for the rewrite. If the idea is
+  well structured and strong, it belongs in the 85-95 band; a well written idea must never
+  be marked down just so the rewrite can look better. Reserve the low bands for real
+  problems, and state those problems plainly.
 - "analysis": two or three short sentences of constructive criticism. Name the weakest part
-  and give a concrete fix. No encouragement padding.
+  and give a concrete fix. No encouragement padding, and no invented flaws either.
 - "outline": an array with exactly three short steps for the rewritten video. The third step
   must be the call to action.
 - "improved": an object with "title" (one punchy line, max 90 characters), "hook" (the first
   two seconds, one or two sentences) and "value" (why it works).
-- "improved_score": integer 0-100, never lower than "score".
+- "improved_score": integer 0-100, never lower than "score", and at most a few points above
+  it when the original was already strong.
 - Write no filler: no emoji, no markdown.
 - {rules}
 
@@ -581,11 +608,18 @@ def _ideas_from_groq(
         title = _model_text(entry.get("title"), 140)
         if not title:
             continue
+        raw_steps = entry.get("steps")
+        steps = (
+            tuple(_model_text(step, 160) for step in raw_steps if _model_text(step))[:3]
+            if isinstance(raw_steps, list)
+            else ()
+        )
         ideas.append(
             Idea(
                 title=title,
                 hook=_model_text(entry.get("hook"), 400),
                 value=_model_text(entry.get("value"), 400),
+                steps=steps,
             )
         )
     if not ideas:
@@ -1421,11 +1455,15 @@ def evaluate_idea(text: str, lang: str | None = None) -> Evaluation:
 
 
 def idea_to_clipboard(idea: Idea) -> str:
-    return (
-        f"{t('clip.title')}: {idea.title}\n"
-        f"{t('clip.hook')}: {idea.hook}\n"
-        f"{t('clip.angle')}: {idea.value}"
-    )
+    lines = [
+        f"{t('clip.title')}: {idea.title}",
+        f"{t('clip.hook')}: {idea.hook}",
+        f"{t('clip.angle')}: {idea.value}",
+    ]
+    if idea.steps:
+        plan = "\n".join(f"{index}. {step}" for index, step in enumerate(idea.steps, start=1))
+        lines.append(f"{t('card.plan')}:\n{plan}")
+    return "\n".join(lines)
 
 
 def _copy_iframe(text: str, label: str) -> str:
@@ -1590,8 +1628,23 @@ html, body, .stApp, [data-testid="stMarkdownContainer"] p,
 .stTextInput input, .stTextArea textarea {
     border-radius: 14px; border: 1.5px solid var(--line);
     padding: .8rem 1rem; font-size: 1rem; background: #fff;
+    color: #111111 !important; caret-color: #111111;
+    -webkit-text-fill-color: #111111 !important;
 }
 .stTextInput input:focus, .stTextArea textarea:focus { border-color: var(--brand-2); }
+.stTextInput input::placeholder, .stTextArea textarea::placeholder {
+    color: #5f6478 !important; opacity: 1 !important;
+    -webkit-text-fill-color: #5f6478 !important;
+}
+.stTextInput input:-webkit-autofill,
+.stTextInput input:-webkit-autofill:hover,
+.stTextInput input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #111111 !important;
+    -webkit-box-shadow: 0 0 0 1000px #fff inset !important;
+}
+[data-baseweb="input"] > input, [data-baseweb="textarea"] > textarea {
+    color: #111111 !important;
+}
 
 [data-testid="stButton"] button {
     border-radius: 14px; font-weight: 700; font-size: .95rem;
@@ -1698,12 +1751,15 @@ html, body, .stApp, [data-testid="stMarkdownContainer"] p,
 /* ---------- cards ---------- */
 .ts-card {
     background: var(--card); border: 1.5px solid var(--line);
-    border-radius: 18px; padding: 1.1rem 1.15rem; display: flex;
+    border-radius: 12px; padding: 20px; display: flex;
     flex-direction: column; gap: .7rem; height: 100%;
-    box-shadow: 0 4px 16px rgba(15,18,32,.05);
+    box-shadow: 0 2px 6px rgba(15,18,32,.05), 0 12px 28px rgba(15,18,32,.07);
     transition: transform .15s ease, box-shadow .15s ease;
 }
-.ts-card:hover { transform: translateY(-4px); box-shadow: 0 14px 30px rgba(15,18,32,.12); }
+.ts-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 10px rgba(15,18,32,.07), 0 18px 40px rgba(15,18,32,.13);
+}
 .ts-card .num {
     width: 30px; height: 30px; border-radius: 9px; display: flex;
     align-items: center; justify-content: center; font-weight: 800; font-size: .9rem;
@@ -1717,7 +1773,13 @@ html, body, .stApp, [data-testid="stMarkdownContainer"] p,
 }
 .ts-card .lbl.hook { background: rgba(255,46,99,.12); color: var(--brand-1); }
 .ts-card .lbl.value { background: rgba(0,180,120,.13); color: #00875a; }
+.ts-card .lbl.plan { background: rgba(123,47,247,.13); color: var(--brand-2); }
 .ts-card p { margin: 0; font-size: .9rem; line-height: 1.7; color: #41465c; }
+.ts-card .ts-steps {
+    margin: 0; padding-inline-start: 1.1rem; display: flex;
+    flex-direction: column; gap: .35rem;
+}
+.ts-card .ts-steps li { font-size: .88rem; line-height: 1.65; color: #41465c; }
 
 /* ---------- paywall ---------- */
 .ts-paywall {
@@ -1957,6 +2019,13 @@ def render_idea_cards(ideas: list[Idea], niche: str, *, platform: str) -> None:
     for row in chunked(ideas):
         for column, idea in zip(st.columns(len(row)), row):
             with column:
+                steps = "".join(f"<li>{html_escape(step)}</li>" for step in idea.steps)
+                plan = (
+                    f'<div class="row"><span class="lbl plan">{html_escape(t("card.plan"))}</span>'
+                    f'<ol class="ts-steps">{steps}</ol></div>'
+                    if steps
+                    else ""
+                )
                 render_html(
                     f"""
                     <div class="ts-card">
@@ -1970,6 +2039,7 @@ def render_idea_cards(ideas: list[Idea], niche: str, *, platform: str) -> None:
                             <span class="lbl value">{why_label}</span>
                             <p>{html_escape(idea.value)}</p>
                         </div>
+                        {plan}
                     </div>
                     """
                 )

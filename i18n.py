@@ -348,6 +348,11 @@ I18N: dict[str, dict[str, str]] = {
         "ar": "الهيكل السريع",
         "fr": "Plan rapide",
     },
+    "card.plan": {
+        "en": "How to film it",
+        "ar": "كيف تصوّرها",
+        "fr": "Comment la filmer",
+    },
     "card.improved": {
         "en": "Upgraded idea",
         "ar": "الفكرة المطوّرة",
