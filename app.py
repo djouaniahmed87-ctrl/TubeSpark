@@ -441,7 +441,7 @@ def _groq_json(system_prompt: str, user_prompt: str, *, temperature: float) -> d
             request: dict[str, Any] = {
                 "messages": messages,
                 "temperature": temperature,
-                "max_tokens": 1400,
+                "max_tokens": 4000,
                 "top_p": 0.95,
             }
             if json_mode:
@@ -3192,7 +3192,7 @@ def inject_styles() -> None:
     render_html(css)
 
     # Additional inline styles for critical elements
-    st.markdown(
+    render_html(
         """
         <style>
         /* Force dark background */
@@ -3213,8 +3213,7 @@ def inject_styles() -> None:
             color: white !important;
         }
         </style>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 
@@ -3576,7 +3575,7 @@ def render_generator_tab() -> None:
     render_html('</div>')
 
     # Generate button - centered
-    st.markdown('<div style="text-align: center; margin: 2rem 0;">', unsafe_allow_html=True)
+    render_html('<div style="text-align: center; margin: 2rem 0;">')
     if st.button(t("gen.generate_btn"), type="primary", icon=":material/bolt:"):
         clean_niche = niche.strip()
         if not clean_niche:
@@ -3782,7 +3781,7 @@ def render_script_tab() -> None:
     render_html('</div>')
 
     # Generate button
-    st.markdown('<div style="text-align: center; margin: 2rem 0;">', unsafe_allow_html=True)
+    render_html('<div style="text-align: center; margin: 2rem 0;">')
     if st.button("⚡ توليد السكريبت المفصل", type="primary", icon=":material/article:"):
         clean_niche = niche.strip()
         clean_idea = script_idea.strip()
@@ -3920,7 +3919,7 @@ def render_seo_tab() -> None:
     render_html('</div>')
 
     # Generate button
-    st.markdown('<div style="text-align: center; margin: 2rem 0;">', unsafe_allow_html=True)
+    render_html('<div style="text-align: center; margin: 2rem 0;">')
     if st.button("⚡ تحسين السيو بالكامل", type="primary", icon=":material/trending_up:"):
         clean_topic = video_topic.strip()
         clean_niche = video_niche.strip()
@@ -3992,7 +3991,7 @@ def main() -> None:
     )
 
     # Force dark theme styles immediately
-    st.markdown(
+    render_html(
         """
         <style>
         /* Force dark background */
@@ -4092,14 +4091,13 @@ def main() -> None:
             padding-right: 2rem !important;
         }
         </style>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
     inject_styles()
 
     # Language switcher at top
-    st.markdown('<div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">', unsafe_allow_html=True)
+    render_html('<div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">')
     render_language_switcher()
     st.markdown('</div>', unsafe_allow_html=True)
 
