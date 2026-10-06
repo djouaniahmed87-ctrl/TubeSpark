@@ -1556,331 +1556,137 @@ def chunked(items: list[Idea], size: int = 3) -> list[list[Idea]]:
 CSS_TEMPLATE = """
 __FONT_IMPORT__
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
 :root {
-    --brand-1: #ff2e63;
-    --brand-2: #7b2ff7;
-    --brand-3: #ff8a00;
-    --ink: #0f1220;
-    --muted: #5b6178;
-    --card: #ffffff;
-    --line: #e9ebf3;
+    --primary-1: #8B5CF6;
+    --primary-2: #EC4899;
+    --ink: #1E293B;
+    --muted: #64748B;
+    --bg: #F7F9FC;
+    --card: #FFFFFF;
+    --border: #E2E8F0;
 }
 
-html, body, .stApp, [data-testid="stMarkdownContainer"] p,
-.stButton button, .stTextInput input, .stTextArea textarea {
+* {
     font-family: __FONT__;
 }
 
-.stApp {
-    background:
-        radial-gradient(900px 500px at 85% -10%, rgba(123,47,247,.16), transparent 60%),
-        radial-gradient(700px 420px at 5% 0%, rgba(255,46,99,.14), transparent 60%),
-        #f7f8fc;
+html, body, .stApp {
     direction: __DIRECTION__;
+    text-align: right;
+    background: var(--bg);
 }
 
 .block-container {
     max-width: 1080px;
-    padding-top: 1.6rem;
-    padding-bottom: 3rem;
+    padding-top: 1.5rem;
+    padding-bottom: 2.5rem;
 }
 
-/* ---------- language switcher ---------- */
-.ts-lang-bar {
-    display: flex; align-items: center; justify-content: center;
-    gap: .6rem; margin-bottom: .3rem;
-}
-.ts-lang-bar span.label { font-size: .8rem; font-weight: 700; color: var(--muted); }
-[data-testid="stPills"] { justify-content: center; gap: .45rem; }
-[data-testid="stPills"] button {
-    border-radius: 999px; padding: .35rem 1.05rem; font-size: .85rem;
-    border: 1.5px solid var(--line); background: #fff; color: var(--ink);
-    font-weight: 700; transition: all .15s ease;
-}
-[data-testid="stPills"] button:hover { border-color: var(--brand-2); color: var(--brand-2); }
-[data-testid="stPills"] button[kind="primary"] {
-    background: linear-gradient(90deg, var(--brand-1), var(--brand-2));
-    border: none; color: #fff;
+/* Inputs */
+div[data-baseweb="input"] input,
+div[data-baseweb="select"] select,
+textarea {
+    background: #FFFFFF !important;
+    color: var(--ink) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    font-size: 0.98rem;
+    line-height: 1.6;
+    box-shadow: none !important;
 }
 
-/* ---------- header ---------- */
-.ts-hero { text-align: center; margin-bottom: 1.6rem; }
-.ts-badge {
-    display: inline-block;
-    background: linear-gradient(90deg, var(--brand-1), var(--brand-2));
-    color: #fff; font-weight: 700; font-size: .82rem;
-    padding: .3rem .85rem; border-radius: 999px; margin-bottom: .9rem;
-}
-.ts-hero h1 {
-    font-size: clamp(1.75rem, 5.2vw, 2.9rem);
-    line-height: 1.3; margin: 0 0 .5rem; color: var(--ink); font-weight: 800;
-}
-.ts-hero h1 .accent {
-    background: linear-gradient(90deg, var(--brand-1), var(--brand-2));
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-}
-.ts-hero p {
-    color: var(--muted); margin: 0 auto; max-width: 46ch;
-    font-size: clamp(.95rem, 2.4vw, 1.08rem);
+div[data-baseweb="input"] input::placeholder,
+textarea::placeholder {
+    color: var(--muted) !important;
+    opacity: 1 !important;
 }
 
-/* ---------- inputs ---------- */
-.stTextInput input, .stTextArea textarea {
-    border-radius: 14px; border: 1.5px solid var(--line);
-    padding: .8rem 1rem; font-size: 1rem; background: #fff;
-    color: #111111 !important; caret-color: #111111;
-    -webkit-text-fill-color: #111111 !important;
-}
-.stTextInput input:focus, .stTextArea textarea:focus { border-color: var(--brand-2); }
-.stTextInput input::placeholder, .stTextArea textarea::placeholder {
-    color: #5f6478 !important; opacity: 1 !important;
-    -webkit-text-fill-color: #5f6478 !important;
-}
-.stTextInput input:-webkit-autofill,
-.stTextInput input:-webkit-autofill:hover,
-.stTextInput input:-webkit-autofill:focus {
-    -webkit-text-fill-color: #111111 !important;
-    -webkit-box-shadow: 0 0 0 1000px #fff inset !important;
-}
-[data-baseweb="input"] > input, [data-baseweb="textarea"] > textarea {
-    color: #111111 !important;
+div[data-baseweb="input"]:focus-within input,
+div[data-baseweb="select"]:focus-within select,
+textarea:focus {
+    border-color: var(--primary-1) !important;
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.18) !important;
+    outline: none !important;
 }
 
-[data-testid="stButton"] button {
-    border-radius: 14px; font-weight: 700; font-size: .95rem;
-    padding: .6rem 1rem; border: 1.5px solid var(--line);
-    background: #fff; color: var(--ink);
-    box-shadow: none; transition: all .15s ease; min-height: 0;
+/* Buttons */
+div.stButton > button {
+    border: none !important;
+    background: linear-gradient(135deg, var(--primary-1), var(--primary-2)) !important;
+    color: #FFFFFF !important;
+    font-weight: 800;
+    font-size: 0.98rem;
+    border-radius: 50px !important;
+    padding: 0.7rem 1.6rem;
+    box-shadow: 0 12px 30px -12px rgba(139, 92, 246, 0.9);
+    transition: all 0.3s ease;
+    letter-spacing: 0.2px;
 }
-[data-testid="stButton"] button:hover {
-    border-color: var(--brand-2); color: var(--brand-2);
+
+div.stButton > button:hover {
+    filter: brightness(1.08);
     transform: translateY(-2px);
-}
-[data-testid="stButton"] button[kind="primary"] {
-    border: none; color: #fff; padding: .8rem 1.1rem; font-size: 1.05rem;
-    background: linear-gradient(90deg, var(--brand-1), var(--brand-2));
-    box-shadow: 0 10px 24px rgba(123,47,247,.28);
-}
-[data-testid="stButton"] button[kind="primary"]:hover {
-    color: #fff; box-shadow: 0 14px 30px rgba(123,47,247,.38);
+    box-shadow: 0 16px 36px -14px rgba(139, 92, 246, 1);
 }
 
-/* ---------- section title ---------- */
-.ts-section {
-    display: flex; align-items: center; gap: .6rem; margin: 2.2rem 0 1rem;
-}
-.ts-section h2 { font-size: clamp(1.15rem, 3.4vw, 1.5rem); margin: 0; color: var(--ink); font-weight: 800; }
-.ts-section span.count {
-    background: rgba(123,47,247,.12); color: var(--brand-2);
-    border-radius: 999px; padding: .15rem .6rem; font-size: .8rem; font-weight: 700;
-}
-.ts-section span.mode {
-    border-radius: 999px; padding: .15rem .65rem; font-size: .78rem; font-weight: 700;
-    white-space: nowrap;
-}
-.ts-section span.mode.shorts { background: rgba(255,138,0,.14); color: #c26a00; }
-.ts-section span.mode.long { background: rgba(0,132,255,.12); color: #0066cc; }
-.ts-section span.mode.lang { background: rgba(0,180,120,.13); color: #00875a; }
-@media (max-width: 640px) {
-    .ts-section { flex-wrap: wrap; }
+/* Premium cards */
+.premium-card {
+    background: var(--card);
+    border-radius: 16px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.05);
+    padding: 24px;
+    margin-bottom: 18px;
+    transition: all 0.3s ease;
+    text-align: right;
 }
 
-/* ---------- selectbox ---------- */
-.ts-field-label {
-    font-size: .78rem; font-weight: 700; color: var(--muted);
-    margin-bottom: .3rem; text-align: start;
-}
-[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
-    border-radius: 14px; border: 1.5px solid var(--line);
-    background: #fff; min-height: 2.85rem; align-items: center;
-    font-weight: 700;
-}
-[data-testid="stSelectbox"] div[data-baseweb="select"] > div:focus-within {
-    border-color: var(--brand-2);
+.premium-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 18px 40px -10px rgba(139, 92, 246, 0.18);
 }
 
-/* ---------- chips ---------- */
-.ts-chips-label {
-    text-align: center; color: var(--muted); font-size: .85rem;
-    margin: .9rem 0 .5rem; font-weight: 700;
+.premium-card h3 {
+    margin: 0 0 14px 0;
+    font-size: 1.14rem;
+    font-weight: 800;
+    color: var(--ink);
+    line-height: 1.6;
 }
 
-/* ---------- social proof ---------- */
-.ts-proof {
-    display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
-    gap: .5rem; margin: .9rem 0 .2rem; padding: .55rem .9rem;
-    background: linear-gradient(90deg, rgba(255,138,0,.10), rgba(123,47,247,.10));
-    border: 1.5px solid rgba(123,47,247,.18); border-radius: 999px;
-    font-size: .84rem; color: var(--muted); position: relative; overflow: hidden;
-}
-.ts-proof b { color: var(--ink); font-weight: 800; }
-.ts-proof .sep { color: #c3c7d6; }
-.ts-proof::after {
-    content: ""; position: absolute; inset: 0; pointer-events: none;
-    background: linear-gradient(100deg, transparent 35%, rgba(255,255,255,.55) 50%, transparent 65%);
-    transform: translateX(-100%);
-    animation: ts-shimmer 3.6s ease-in-out infinite;
-}
-@keyframes ts-shimmer {
-    0% { transform: translateX(-100%); }
-    55%, 100% { transform: translateX(100%); }
-}
-@media (prefers-reduced-motion: reduce) {
-    .ts-proof::after { animation: none; }
+.premium-card .meta {
+    color: var(--muted);
+    font-size: 0.92rem;
+    line-height: 1.9;
+    margin-bottom: 12px;
 }
 
-/* ---------- mini outline ---------- */
-.ts-outline { margin: 0; padding: 0; list-style: none; counter-reset: step; }
-.ts-outline li {
-    position: relative; padding-block: .35rem; padding-inline: 2rem 0;
-    margin-bottom: .35rem; font-size: .88rem; line-height: 1.65; color: #41465c;
-    border-bottom: 1px dashed var(--line);
+.premium-card .row {
+    margin: 14px 0;
 }
-.ts-outline li:last-child { border-bottom: none; margin-bottom: 0; }
-.ts-outline li::before {
-    counter-increment: step; content: counter(step);
-    position: absolute; inset-inline-start: 0; top: .45rem;
-    width: 20px; height: 20px; border-radius: 50%;
-    background: linear-gradient(135deg, var(--brand-1), var(--brand-2));
-    color: #fff; font-size: .68rem; font-weight: 800;
-    display: flex; align-items: center; justify-content: center;
-}
-.ts-outline b { color: var(--ink); }
 
-/* ---------- idea cards ---------- */
-/* ---------- cards ---------- */
-.ts-card {
-    background: var(--card); border: 1.5px solid var(--line);
-    border-radius: 12px; padding: 20px; display: flex;
-    flex-direction: column; gap: .7rem; height: 100%;
-    box-shadow: 0 2px 6px rgba(15,18,32,.05), 0 12px 28px rgba(15,18,32,.07);
-    transition: transform .15s ease, box-shadow .15s ease;
+.premium-card .badge {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 800;
+    background: rgba(139, 92, 246, 0.12);
+    color: var(--primary-1);
+    margin-bottom: 12px;
 }
-.ts-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 4px 10px rgba(15,18,32,.07), 0 18px 40px rgba(15,18,32,.13);
-}
-.ts-card .num {
-    width: 30px; height: 30px; border-radius: 9px; display: flex;
-    align-items: center; justify-content: center; font-weight: 800; font-size: .9rem;
-    color: #fff; background: linear-gradient(135deg, var(--brand-1), var(--brand-2));
-}
-.ts-card h3 { margin: 0; font-size: 1.02rem; line-height: 1.5; color: var(--ink); font-weight: 700; }
-.ts-card .row { border-top: 1px dashed var(--line); padding-top: .65rem; }
-.ts-card .lbl {
-    display: inline-block; font-size: .7rem; font-weight: 800; letter-spacing: .3px;
-    padding: .15rem .5rem; border-radius: 6px; margin-bottom: .3rem;
-}
-.ts-card .lbl.hook { background: rgba(255,46,99,.12); color: var(--brand-1); }
-.ts-card .lbl.value { background: rgba(0,180,120,.13); color: #00875a; }
-.ts-card .lbl.plan { background: rgba(123,47,247,.13); color: var(--brand-2); }
-.ts-card p { margin: 0; font-size: .9rem; line-height: 1.7; color: #41465c; }
-.ts-card .ts-steps {
-    margin: 0; padding-inline-start: 1.1rem; display: flex;
-    flex-direction: column; gap: .35rem;
-}
-.ts-card .ts-steps li { font-size: .88rem; line-height: 1.65; color: #41465c; }
 
-/* ---------- paywall ---------- */
-.ts-paywall {
-    margin-top: 2.4rem; border-radius: 24px; padding: 3px;
-    background: linear-gradient(120deg, var(--brand-1), var(--brand-3), var(--brand-2));
-    box-shadow: 0 18px 44px rgba(123,47,247,.22);
+.premium-card ol {
+    margin: 0;
+    padding-right: 22px;
+    color: var(--ink);
+    line-height: 1.9;
 }
-.ts-paywall-inner {
-    background: #fff; border-radius: 21px; padding: clamp(1.2rem, 4vw, 2.4rem);
-    text-align: center;
-}
-.ts-paywall .lock { font-size: 1.9rem; }
-.ts-paywall h2 {
-    margin: .5rem 0 .6rem; font-size: clamp(1.15rem, 3.6vw, 1.7rem);
-    color: var(--ink); line-height: 1.55; font-weight: 800;
-}
-.ts-paywall .price {
-    display: inline-flex; align-items: center; gap: .4rem; font-weight: 800;
-    font-size: 1.05rem; color: var(--brand-1); background: rgba(255,46,99,.09);
-    border-radius: 999px; padding: .3rem .9rem; margin-bottom: 1rem;
-}
-.ts-paywall ul {
-    list-style: none; padding: 0; margin: 0 0 1.2rem; color: #41465c;
-    display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center;
-}
-.ts-paywall ul li { font-size: .88rem; }
-.ts-paywall ul li::before { content: "\u2713 "; color: #00b478; font-weight: 800; }
 
-/* ---------- CTA button ---------- */
-.ts-cta {
-    display: block; width: 100%; max-width: 460px; margin: 0 auto;
-    text-align: center; text-decoration: none; color: #fff !important;
-    font-weight: 800; font-size: clamp(1rem, 3vw, 1.12rem);
-    padding: 1rem 1.4rem; border-radius: 16px;
-    background: linear-gradient(90deg, var(--brand-1), var(--brand-2));
-    box-shadow: 0 14px 30px rgba(255,46,99,.32);
-    transition: transform .15s ease, box-shadow .15s ease;
+.premium-card li + li {
+    margin-top: 8px;
 }
-.ts-cta:hover { transform: translateY(-3px); box-shadow: 0 20px 40px rgba(255,46,99,.42); }
-.ts-fine { font-size: .76rem; color: #8a90a6; margin-top: .8rem; }
-
-/* ---------- cross promo footer ---------- */
-.ts-promo { margin-top: 2.6rem; border-top: 1px solid var(--line); padding-top: 1.4rem; text-align: center; }
-.ts-promo h3 { margin: 0 0 .9rem; font-size: 1rem; color: var(--ink); font-weight: 800; }
-.ts-promo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; max-width: 640px; margin: 0 auto; }
-@media (max-width: 640px) { .ts-promo-grid { grid-template-columns: 1fr; } }
-.ts-promo-item {
-    display: flex; align-items: center; justify-content: space-between; gap: .6rem;
-    background: #fff; border: 1.5px solid var(--line); border-radius: 14px;
-    padding: .8rem 1rem; text-decoration: none; color: var(--ink) !important;
-    font-weight: 700; font-size: .9rem; transition: all .15s ease; text-align: start;
-}
-.ts-promo-item:hover { border-color: var(--brand-3); background: #fffaf3; }
-.ts-promo-item .price-tag { color: var(--brand-3); font-weight: 800; white-space: nowrap; }
-.ts-promo-item .arrow { color: #b9bed0; }
-.ts-copy { font-size: .78rem; color: #8a90a6; margin-top: 1.4rem; }
-
-/* ---------- tabs ---------- */
-[data-testid="stTabs"] [data-baseweb="tab-list"] {
-    gap: .5rem; justify-content: center; background: transparent;
-}
-[data-testid="stTabs"] [data-baseweb="tab"] {
-    font-weight: 700; font-size: 1rem; border-radius: 999px;
-    padding: .55rem 1.2rem;
-}
-[data-testid="stTabs"] [data-baseweb="tab-highlight"] { border-radius: 999px; }
-[data-testid="stTabs"] [data-baseweb="tab-border"] { background-color: var(--line); }
-[data-testid="stTabs"] [aria-selected="true"] { color: var(--brand-2); }
-
-/* ---------- evaluation ---------- */
-.ts-eval-grid {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;
-}
-@media (max-width: 900px) { .ts-eval-grid { grid-template-columns: 1fr; } }
-
-.ts-card.improved {
-    border: none; padding: 3px;
-    background: linear-gradient(120deg, var(--brand-1), var(--brand-2));
-    box-shadow: 0 14px 34px rgba(123,47,247,.24);
-}
-.ts-card.improved:hover { transform: none; }
-.ts-card.improved > .ts-card-body {
-    background: #fff; border-radius: 15px; padding: 1.1rem 1.15rem;
-    display: flex; flex-direction: column; gap: .7rem; height: 100%;
-}
-.ts-card.improved .lbl.angle { background: rgba(123,47,247,.12); color: var(--brand-2); }
-.ts-card.improved .lbl.outline-lbl { background: rgba(255,138,0,.14); color: #c26a00; }
-.ts-flag {
-    display: inline-block; background: linear-gradient(90deg, var(--brand-1), var(--brand-2));
-    color: #fff; font-size: .72rem; font-weight: 700;
-    padding: .2rem .65rem; border-radius: 999px;
-}
-[data-testid="stMetricValue"] { font-weight: 800; color: var(--ink); }
-
-/* ---------- misc ---------- */
-.ts-note {
-    text-align: center; color: var(--muted); font-size: .92rem;
-    background: #fff; border: 1.5px dashed var(--line); border-radius: 16px;
-    padding: 1.4rem; margin-top: 1.5rem;
-}
-#MainMenu, footer, .stDeployButton { visibility: hidden; }
 </style>
 """
 
@@ -1997,55 +1803,36 @@ def render_social_proof() -> None:
 
 def render_idea_cards(ideas: list[Idea], niche: str, *, platform: str) -> None:
     lang = current_lang()
-    short_form = is_short_form(platform)
-    mode_label = t("gen.mode_short") if short_form else t("gen.mode_long")
-    mode_class = "mode shorts" if short_form else "mode long"
-
-    render_html(
-        f"""
-        <div class="ts-section">
-            <h2>{html_escape(t("gen.section_title", niche=niche))}</h2>
-            <span class="{mode_class}">{html_escape(option_label("platform", platform, lang))} · {html_escape(mode_label)}</span>
-            <span class="mode lang">{html_escape(LANGUAGE_LABELS[lang])}</span>
-            <span class="count">{html_escape(t("gen.count_badge", n=len(ideas)))}</span>
-        </div>
-        """
-    )
-
     core_label = html_escape(t("card.core"))
     why_label = html_escape(t("card.why"))
+    plan_label = html_escape(t("card.plan"))
 
     offset = 0
     for row in chunked(ideas):
-        for column, idea in zip(st.columns(len(row)), row):
+        cols = st.columns(len(row))
+        for column, idea in zip(cols, row):
             with column:
                 steps = "".join(f"<li>{html_escape(step)}</li>" for step in idea.steps)
-                plan = (
-                    f'<div class="row"><span class="lbl plan">{html_escape(t("card.plan"))}</span>'
-                    f'<ol class="ts-steps">{steps}</ol></div>'
-                    if steps
-                    else ""
-                )
+                plan_html = f'<div class="row"><span class="badge">{plan_label}</span><ol>{steps}</ol></div>' if steps else ""
                 render_html(
                     f"""
-                    <div class="ts-card">
-                        <div class="num">{offset + 1}</div>
+                    <div class="premium-card">
+                        <div class="badge">#{offset + 1} {html_escape(niche)}</div>
                         <h3>{html_escape(idea.title)}</h3>
                         <div class="row">
-                            <span class="lbl hook">{core_label}</span>
-                            <p>{html_escape(idea.hook)}</p>
+                            <span class="badge">{core_label}</span>
+                            <div class="meta">{html_escape(idea.hook)}</div>
                         </div>
                         <div class="row">
-                            <span class="lbl value">{why_label}</span>
-                            <p>{html_escape(idea.value)}</p>
+                            <span class="badge">{why_label}</span>
+                            <div class="meta">{html_escape(idea.value)}</div>
                         </div>
-                        {plan}
+                        {plan_html}
                     </div>
                     """
                 )
                 render_copy_button(idea_to_clipboard(idea))
-        offset += len(row)
-
+            offset += 1
 
 def render_paywall(context: str = "generate") -> None:
     generate = context == "generate"
