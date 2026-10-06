@@ -1835,6 +1835,19 @@ FONT_STACKS: dict[str, str] = {
 }
 
 
+def render_html(markup: str) -> None:
+    """Renders a raw HTML block.
+
+    The indentation is stripped on every line because markdown turns any block that starts
+    with four or more spaces into a code block, and a blank line closes the surrounding
+    HTML block. Left alone, an indented triple-quoted template is displayed as plain text
+    instead of being rendered as markup. Leading whitespace between tags is insignificant
+    here since the templates contain no ``<pre>`` or ``<textarea>`` elements.
+    """
+    payload = "\n".join(line.strip() for line in markup.splitlines() if line.strip())
+    st.markdown(payload, unsafe_allow_html=True)
+
+
 def inject_styles() -> None:
     """Injects the stylesheet, tuned to the active language (font + text direction)."""
     lang = current_lang()
@@ -1843,7 +1856,7 @@ def inject_styles() -> None:
         .replace("__FONT__", FONT_STACKS[lang])
         .replace("__DIRECTION__", text_direction())
     )
-    st.markdown(css, unsafe_allow_html=True)
+    render_html(css)
 
 
 # --------------------------------------------------------------------------------------
@@ -1881,9 +1894,8 @@ def _regenerate_on_mode_change() -> None:
 
 def render_language_switcher() -> None:
     """Language selector pinned at the top of the page; drives the whole interface."""
-    st.markdown(
-        f'<div class="ts-lang-bar"><span class="label">{html_escape(t("lang.label"))}</span></div>',
-        unsafe_allow_html=True,
+    render_html(
+        f'<div class="ts-lang-bar"><span class="label">{html_escape(t("lang.label"))}</span></div>'
     )
     st.pills(
         t("lang.switch"),
@@ -1897,28 +1909,26 @@ def render_language_switcher() -> None:
 
 
 def render_hero() -> None:
-    st.markdown(
+    render_html(
         f"""
         <div class="ts-hero">
             <div class="ts-badge">{html_escape(t("brand.badge"))}</div>
             <h1>{html_escape(t("hero.title_pre"))}<span class="accent">{html_escape(t("hero.title_accent"))}</span></h1>
             <p>{html_escape(t("hero.subtitle"))}</p>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 
 def render_social_proof() -> None:
-    st.markdown(
+    render_html(
         f"""
         <div class="ts-proof">
             <span class="item">{t("proof.generated", n=IDEAS_GENERATED_WEEK)}</span>
             <span class="sep">·</span>
             <span class="item">{t("proof.rating", score=RATING_VALUE, creators=RATING_COUNT)}</span>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 
@@ -1928,7 +1938,7 @@ def render_idea_cards(ideas: list[Idea], niche: str, *, platform: str) -> None:
     mode_label = t("gen.mode_short") if short_form else t("gen.mode_long")
     mode_class = "mode shorts" if short_form else "mode long"
 
-    st.markdown(
+    render_html(
         f"""
         <div class="ts-section">
             <h2>{html_escape(t("gen.section_title", niche=niche))}</h2>
@@ -1936,8 +1946,7 @@ def render_idea_cards(ideas: list[Idea], niche: str, *, platform: str) -> None:
             <span class="mode lang">{html_escape(LANGUAGE_LABELS[lang])}</span>
             <span class="count">{html_escape(t("gen.count_badge", n=len(ideas)))}</span>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
     core_label = html_escape(t("card.core"))
@@ -1961,7 +1970,7 @@ def render_idea_cards(ideas: list[Idea], niche: str, *, platform: str) -> None:
         for index, idea in enumerate(ideas, start=1)
     )
 
-    st.markdown(f'<div class="ts-cards">{cards}</div>', unsafe_allow_html=True)
+    render_html(f'<div class="ts-cards">{cards}</div>')
     render_copy_buttons([idea_to_clipboard(idea) for idea in ideas])
 
 
@@ -1970,7 +1979,7 @@ def render_paywall(context: str = "generate") -> None:
     headline = t("pay.generate_headline" if generate else "pay.evaluate_headline", price=PRICE_LABEL)
     cta = t("pay.cta_generate" if generate else "pay.cta_evaluate")
     benefits = "\n".join(f"<li>{html_escape(t(f'pay.b{index}'))}</li>" for index in range(1, 7))
-    st.markdown(
+    render_html(
         f"""
         <div class="ts-paywall">
             <div class="ts-paywall-inner">
@@ -1986,21 +1995,19 @@ def render_paywall(context: str = "generate") -> None:
                 <div class="ts-fine">{html_escape(t("pay.fine"))}</div>
             </div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 
 def render_evaluation(result: Evaluation, original: str) -> None:
-    st.markdown(
+    render_html(
         f"""
         <div class="ts-section">
             <h2>{html_escape(t("eval.section"))}</h2>
             <span class="mode long">{html_escape(t("eval.before"))}</span>
             <span class="count">{html_escape(t("eval.analyzed"))}</span>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
     st.progress(result.score / 100, text=t("eval.progress", n=result.score))
@@ -2014,7 +2021,7 @@ def render_evaluation(result: Evaluation, original: str) -> None:
     )
 
     outline_items = "".join(f"<li>{html_escape(step)}</li>" for step in result.outline)
-    st.markdown(
+    render_html(
         f"""
         <div class="ts-eval-grid">
             <div class="ts-card">
@@ -2050,8 +2057,7 @@ def render_evaluation(result: Evaluation, original: str) -> None:
                 </div>
             </div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
     render_copy_buttons([idea_to_clipboard(result.idea)])
 
@@ -2059,7 +2065,7 @@ def render_evaluation(result: Evaluation, original: str) -> None:
 def render_footer() -> None:
     arrow = ARROW_LEFT if is_rtl() else ARROW_RIGHT
     credit = "footer.copy" if groq_is_ready() else "footer.copy_fallback"
-    st.markdown(
+    render_html(
         f"""
         <div class="ts-promo">
             <h3>{html_escape(t("footer.title"))}</h3>
@@ -2075,8 +2081,7 @@ def render_footer() -> None:
             </div>
             <div class="ts-copy">{html_escape(t(credit))}</div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 
@@ -2091,9 +2096,8 @@ def render_generator_tab() -> None:
     col_niche, col_vibe = st.columns([2, 1], gap="small")
 
     with col_niche:
-        st.markdown(
-            f'<div class="ts-field-label">{html_escape(t("gen.niche_label"))}</div>',
-            unsafe_allow_html=True,
+        render_html(
+            f'<div class="ts-field-label">{html_escape(t("gen.niche_label"))}</div>'
         )
         niche = st.text_input(
             t("gen.niche_label"),
@@ -2103,9 +2107,8 @@ def render_generator_tab() -> None:
         )
 
     with col_vibe:
-        st.markdown(
-            f'<div class="ts-field-label">{html_escape(t("gen.vibe_label"))}</div>',
-            unsafe_allow_html=True,
+        render_html(
+            f'<div class="ts-field-label">{html_escape(t("gen.vibe_label"))}</div>'
         )
         vibe = st.selectbox(
             t("gen.vibe_label"),
@@ -2119,9 +2122,8 @@ def render_generator_tab() -> None:
     col_platform, col_audience = st.columns(2, gap="small")
 
     with col_platform:
-        st.markdown(
-            f'<div class="ts-field-label">{html_escape(t("gen.platform_label"))}</div>',
-            unsafe_allow_html=True,
+        render_html(
+            f'<div class="ts-field-label">{html_escape(t("gen.platform_label"))}</div>'
         )
         platform = st.selectbox(
             t("gen.platform_label"),
@@ -2133,9 +2135,8 @@ def render_generator_tab() -> None:
         )
 
     with col_audience:
-        st.markdown(
-            f'<div class="ts-field-label">{html_escape(t("gen.audience_label"))}</div>',
-            unsafe_allow_html=True,
+        render_html(
+            f'<div class="ts-field-label">{html_escape(t("gen.audience_label"))}</div>'
         )
         audience = st.selectbox(
             t("gen.audience_label"),
@@ -2167,9 +2168,8 @@ def render_generator_tab() -> None:
     render_ai_error()
     render_social_proof()
 
-    st.markdown(
-        f'<div class="ts-chips-label">{html_escape(t("gen.chips_label"))}</div>',
-        unsafe_allow_html=True,
+    render_html(
+        f'<div class="ts-chips-label">{html_escape(t("gen.chips_label"))}</div>'
     )
     st.pills(
         t("gen.niche_pills"),
@@ -2185,9 +2185,8 @@ def render_generator_tab() -> None:
     ideas: list[Idea] = st.session_state.get("ideas", [])
 
     if not ideas:
-        st.markdown(
-            f'<div class="ts-note">{html_escape(t("gen.empty_note"))}</div>',
-            unsafe_allow_html=True,
+        render_html(
+            f'<div class="ts-note">{html_escape(t("gen.empty_note"))}</div>'
         )
         return
 
@@ -2215,9 +2214,8 @@ def render_generator_tab() -> None:
 
 
 def render_evaluate_tab() -> None:
-    st.markdown(
-        f'<div class="ts-note" style="margin-top:.5rem">{html_escape(t("eval.note"))}</div>',
-        unsafe_allow_html=True,
+    render_html(
+        f'<div class="ts-note" style="margin-top:.5rem">{html_escape(t("eval.note"))}</div>'
     )
 
     idea_text = st.text_area(
