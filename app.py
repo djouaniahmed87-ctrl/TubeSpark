@@ -1499,14 +1499,16 @@ def _copy_iframe(text: str, label: str) -> str:
     """
 
 
-def render_copy_buttons(items: list[str]) -> None:
-    """Renders one small copy button per idea, aligned under each card."""
-    if not items:
+def render_copy_button(text: str) -> None:
+    """Renders the copy button that belongs to a single card."""
+    if not text:
         return
-    label = t("copy.idea")
-    for col, text in zip(st.columns(len(items)), items):
-        with col:
-            st.iframe(_copy_iframe(text, label), height=46)
+    st.iframe(_copy_iframe(text, t("copy.idea")), height=46)
+
+
+def chunked(items: list[Idea], size: int = 3) -> list[list[Idea]]:
+    """Splits the ideas into rows so each row can be laid out in columns."""
+    return [items[index : index + size] for index in range(0, len(items), size)]
 
 
 # --------------------------------------------------------------------------------------
@@ -1693,9 +1695,7 @@ html, body, .stApp, [data-testid="stMarkdownContainer"] p,
 .ts-outline b { color: var(--ink); }
 
 /* ---------- idea cards ---------- */
-.ts-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
-@media (max-width: 900px) { .ts-cards { grid-template-columns: 1fr; } }
-
+/* ---------- cards ---------- */
 .ts-card {
     background: var(--card); border: 1.5px solid var(--line);
     border-radius: 18px; padding: 1.1rem 1.15rem; display: flex;
@@ -1864,11 +1864,12 @@ def inject_styles() -> None:
 # --------------------------------------------------------------------------------------
 
 
-def _set_niche_from_pill(current: str) -> None:
-    """Callback: fills the niche input with the selected suggestion chip."""
+def _set_niche_from_pill() -> None:
+    """Callback: fills the niche input with the localized word behind the selected chip."""
     chosen = st.session_state.get("niche_examples")
-    if chosen and chosen != current:
-        st.session_state["niche"] = chosen
+    if not chosen:
+        return
+    st.session_state["niche"] = option_formatter("niche", current_lang())(chosen)
 
 
 def _regenerate_on_mode_change() -> None:
@@ -1952,26 +1953,28 @@ def render_idea_cards(ideas: list[Idea], niche: str, *, platform: str) -> None:
     core_label = html_escape(t("card.core"))
     why_label = html_escape(t("card.why"))
 
-    cards = "\n".join(
-        f"""
-        <div class="ts-card">
-            <div class="num">{index}</div>
-            <h3>{html_escape(idea.title)}</h3>
-            <div class="row">
-                <span class="lbl hook">{core_label}</span>
-                <p>{html_escape(idea.hook)}</p>
-            </div>
-            <div class="row">
-                <span class="lbl value">{why_label}</span>
-                <p>{html_escape(idea.value)}</p>
-            </div>
-        </div>
-        """
-        for index, idea in enumerate(ideas, start=1)
-    )
-
-    render_html(f'<div class="ts-cards">{cards}</div>')
-    render_copy_buttons([idea_to_clipboard(idea) for idea in ideas])
+    offset = 0
+    for row in chunked(ideas):
+        for column, idea in zip(st.columns(len(row)), row):
+            with column:
+                render_html(
+                    f"""
+                    <div class="ts-card">
+                        <div class="num">{offset + 1}</div>
+                        <h3>{html_escape(idea.title)}</h3>
+                        <div class="row">
+                            <span class="lbl hook">{core_label}</span>
+                            <p>{html_escape(idea.hook)}</p>
+                        </div>
+                        <div class="row">
+                            <span class="lbl value">{why_label}</span>
+                            <p>{html_escape(idea.value)}</p>
+                        </div>
+                    </div>
+                    """
+                )
+                render_copy_button(idea_to_clipboard(idea))
+        offset += len(row)
 
 
 def render_paywall(context: str = "generate") -> None:
@@ -2059,7 +2062,11 @@ def render_evaluation(result: Evaluation, original: str) -> None:
         </div>
         """
     )
-    render_copy_buttons([idea_to_clipboard(result.idea)])
+
+    # the copy action belongs to the improved card, so it sits in that column
+    spacer, holder = st.columns(2)
+    with holder:
+        render_copy_button(idea_to_clipboard(result.idea))
 
 
 def render_footer() -> None:
@@ -2179,7 +2186,6 @@ def render_generator_tab() -> None:
         key="niche_examples",
         label_visibility="collapsed",
         on_change=_set_niche_from_pill,
-        args=(st.session_state.get("niche", ""),),
     )
 
     ideas: list[Idea] = st.session_state.get("ideas", [])
