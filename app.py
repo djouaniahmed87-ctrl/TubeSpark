@@ -3828,128 +3828,14 @@ def render_footer() -> None:
 
 
 def render_generator_tab() -> None:
-    lang = current_lang()
-
-    render_html('<div class="ts-input-container">')
-
+    """Minimal generator tab: no legacy channel-form UI."""
     render_html(
-        f'<div class="ts-field-label">{html_escape(t("gen.niche_label"))}</div>'
+        """
+        <div class="ts-note">
+            مساحة العمل جاهزة. استخدم التبويبات في الجانب الأيسر للاستمرار في إنشاء الأفكار، السكريبتات، أو تحسينات SEO.
+        </div>
+        """
     )
-    niche = st.text_input(
-        t("gen.niche_label"),
-        key="niche",
-        placeholder=t("gen.niche_placeholder"),
-        label_visibility="collapsed",
-    )
-
-    col_platform, col_vibe, col_audience = st.columns([1, 1, 1], gap="medium")
-
-    with col_platform:
-        render_html(
-            f'<div class="ts-field-label">{html_escape(t("gen.platform_label"))}</div>'
-        )
-        platform = st.selectbox(
-            t("gen.platform_label"),
-            options=list(PLATFORM_KEYS),
-            format_func=option_formatter("platform", lang),
-            key="platform",
-            label_visibility="collapsed",
-            on_change=_regenerate_on_mode_change,
-        )
-
-    with col_vibe:
-        render_html(
-            f'<div class="ts-field-label">{html_escape(t("gen.vibe_label"))}</div>'
-        )
-        vibe = st.selectbox(
-            t("gen.vibe_label"),
-            options=list(VIBE_KEYS),
-            format_func=option_formatter("vibe", lang),
-            key="video_vibe",
-            label_visibility="collapsed",
-            on_change=_regenerate_on_mode_change,
-        )
-
-    with col_audience:
-        render_html(
-            f'<div class="ts-field-label">{html_escape(t("gen.audience_label"))}</div>'
-        )
-        audience = st.selectbox(
-            t("gen.audience_label"),
-            options=list(AUDIENCE_KEYS),
-            format_func=option_formatter("audience", lang),
-            key="audience",
-            label_visibility="collapsed",
-            on_change=_regenerate_on_mode_change,
-        )
-
-    render_html('</div>')
-
-    render_html('<div style="text-align: center; margin: 2rem 0;">')
-    if st.button(t("gen.generate_btn"), type="primary", icon=":material/bolt:"):
-        clean_niche = niche.strip()
-        if not clean_niche:
-            st.warning(t("gen.empty_niche_warning"))
-        else:
-            with st.spinner(t("ai.thinking")):
-                st.session_state["ideas"] = generate_ideas(
-                    clean_niche,
-                    FREE_IDEAS_COUNT,
-                    variant=st.session_state.get("variant", 0),
-                    platform=platform,
-                    vibe=vibe,
-                    audience=audience,
-                    lang=lang,
-                )
-            st.session_state["ideas_niche"] = clean_niche
-            st.session_state["variant"] = 0
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    render_ai_error()
-    render_social_proof()
-
-    render_html(
-        f'<div class="ts-chips-label">{html_escape(t("gen.chips_label"))}</div>'
-    )
-    st.pills(
-        t("gen.niche_pills"),
-        options=list(NICHE_KEYS),
-        format_func=option_formatter("niche", lang),
-        selection_mode="single",
-        key="niche_examples",
-        label_visibility="collapsed",
-        on_change=_set_niche_from_pill,
-    )
-
-    ideas: list[Idea] = st.session_state.get("ideas", [])
-
-    if not ideas:
-        render_html(
-            f'<div class="ts-note">{html_escape(t("gen.empty_note"))}</div>'
-        )
-        return
-
-    render_idea_cards(ideas, st.session_state["ideas_niche"], platform=platform)
-
-    col_a, col_b = st.columns(2)
-    if col_a.button(t("gen.more_btn"), width="stretch", icon=":material/casino:"):
-        st.session_state["variant"] = st.session_state.get("variant", 0) + 1
-        with st.spinner(t("ai.thinking")):
-            st.session_state["ideas"] = generate_ideas(
-                st.session_state["ideas_niche"],
-                FREE_IDEAS_COUNT,
-                st.session_state["variant"],
-                platform=platform,
-                vibe=vibe,
-                audience=audience,
-                lang=lang,
-            )
-    if col_b.button(t("gen.clear_btn"), width="stretch", icon=":material/delete_outline:"):
-        st.session_state["ideas"] = []
-        st.session_state["ideas_niche"] = ""
-
-    render_ai_error()
-    render_paywall("generate")
 
 
 def render_evaluate_tab() -> None:
@@ -4398,11 +4284,7 @@ def main() -> None:
 
     inject_custom_header()
     inject_styles()
-
-    render_language_switcher()
-    render_hero()
     render_workspace_layout()
-    render_footer()
 
 
 if __name__ == "__main__":
