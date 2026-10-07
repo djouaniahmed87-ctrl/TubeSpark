@@ -498,14 +498,13 @@ def _model_score(value: Any, *, minimum: int = 0, maximum: int = 100) -> int:
     return max(minimum, min(maximum, score))
 
 
-def _idea_system_prompt(count: int, *, lang: str, short_form: bool) -> str:
+def _idea_system_prompt(count: int, *, lang: str, short_form: bool, duration: str = "8-10min") -> str:
     rules = AI_LANGUAGE_RULES.get(lang, AI_LANGUAGE_RULES[DEFAULT_LANGUAGE])
     format_rule = (
         "Each idea must fit a video of 60 seconds or less, and its opening frame must already "
         "show the payoff."
         if short_form
-        else "Each idea is a standalone video of 8 to 12 minutes, with room for story, examples "
-        "and a payoff at the end."
+        else f"Each idea is a standalone video matching the selected runtime of {duration}, with room for story, examples and a payoff at the end."
     )
     return f"""You are an elite viral content strategist with 15+ years of experience across
 YouTube, TikTok, Instagram Reels, and Facebook. You specialize in creating high-retention,
@@ -560,6 +559,7 @@ def _idea_user_prompt(
     audience: str,
     lang: str,
     variant: int,
+    duration: str = "8-10min",
 ) -> str:
     freshness = (
         "These angles were already suggested, so pick clearly different mechanisms."
@@ -570,6 +570,7 @@ def _idea_user_prompt(
 - Topic / niche: {niche}
 - Platform: {option_label("platform", platform, lang)}
 - Video format: {t_for(lang, "gen.mode_short") if is_short_form(platform) else t_for(lang, "gen.mode_long")}
+- Target duration: {duration}
 - Tone and angle: {option_label("vibe", vibe, lang)}
 - Target audience: {option_label("audience", audience, lang)}
 - Number of ideas: {count}
@@ -933,10 +934,11 @@ def _ideas_from_groq(
     audience: str,
     lang: str,
     variant: int,
+    duration: str = "8-10min",
 ) -> list[Idea]:
     count = max(1, min(count, 10))
     data = _groq_json(
-        _idea_system_prompt(count, lang=lang, short_form=is_short_form(platform)),
+        _idea_system_prompt(count, lang=lang, short_form=is_short_form(platform), duration=duration),
         _idea_user_prompt(
             niche,
             count,
@@ -945,6 +947,7 @@ def _ideas_from_groq(
             audience=audience,
             lang=lang,
             variant=variant,
+            duration=duration,
         ),
         temperature=0.9,
     )
@@ -1458,11 +1461,13 @@ def _template_ideas(
     vibe: str,
     audience: str,
     lang: str,
+    duration: str = "8-10min",
 ) -> list[Idea]:
     """Offline generator: builds niche-specific ideas from the active language pool.
 
     Used as the fallback whenever Groq is unavailable, so the page never goes blank.
     """
+    _ = duration
     short_form = is_short_form(platform)
     mode = "short" if short_form else "long"
     pool = template_pool(lang, short_form=short_form)
@@ -1497,18 +1502,19 @@ def generate_ideas(
     vibe: str = "",
     audience: str = "",
     lang: str | None = None,
+    duration: str = "8-10min",
 ) -> list[Idea]:
     """Generates ideas with Groq, falling back to the built-in pools when it is down.
 
-    Variables driving the prompt: niche, platform, output language, vibe, target audience and
-    the re-roll `variant`. Failures never raise: a friendly message is stored for
-    `render_ai_error()` and the offline templates are returned instead.
+    Variables driving the prompt: niche, platform, output language, vibe, target audience,
+    the re-roll `variant`, and the selected video `duration`.
     """
     clean_niche = niche.strip()
     if not clean_niche:
         return []
 
     lang = lang if lang in SUPPORTED_LANGUAGES else current_lang()
+    normalized_duration = normalize_duration_value(duration)
 
     problem = _configure_groq()
     if problem is None:
@@ -1521,6 +1527,7 @@ def generate_ideas(
                 audience=audience,
                 lang=lang,
                 variant=variant,
+                duration=normalized_duration,
             )
         except Exception as exc:
             _set_ai_error(_classify_ai_error(exc), _ai_error_detail(exc))
@@ -1538,6 +1545,7 @@ def generate_ideas(
         vibe=vibe,
         audience=audience,
         lang=lang,
+        duration=normalized_duration,
     )
 
 
@@ -1973,6 +1981,47 @@ def render_copy_button(text: str) -> None:
     st.iframe(_copy_iframe(text, t("copy.idea")), height=46)
 
 
+def _artifact_key(value: str) -> str:
+    clean = re.sub(r"[^a-zA-Z0-9_-]+", "_", value or "artifact").strip("_")
+    return clean.lower() or "artifact"
+
+
+def _selected_meta_html(selected: bool, label: str = "Selected") -> str:
+    if not selected:
+        return ""
+    return (
+        '<span class="badge" style="background: rgba(16,185,129,0.12); '
+        'color: #A7F3D0; border-color: rgba(52,211,153,0.28);">'
+        f'{html_escape(label)}</span>'
+    )
+
+
+def _render_chip_row(values: tuple[str, ...], *, limit: int = 8) -> str:
+    if not values:
+        return ""
+    chips = " ".join(f"<span class='tag'>{html_escape(value)}</span>" for value in values[:limit])
+    return f'<div class="tags">{chips}</div>'
+
+
+def render_artifact_card(title: str, body: str, *, badge: str = "Artifact", meta: str = "") -> None:
+    """Shared visual wrapper for AI-generated output so each result feels like a product artifact."""
+    if not body:
+        return
+    meta_html = f'<span class="artifact-meta">{html_escape(meta)}</span>' if meta else ""
+    render_html(
+        f"""
+        <div class="artifact-shell">
+            <div class="artifact-header">
+                <span class="artifact-badge">{html_escape(badge)}</span>
+                {meta_html}
+            </div>
+            <div class="artifact-body">{html_escape(body)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def chunked(items: list[Idea], size: int = 3) -> list[list[Idea]]:
     """Splits the ideas into rows so each row can be laid out in columns."""
     return [items[index : index + size] for index in range(0, len(items), size)]
@@ -1986,7 +2035,6 @@ CSS_TEMPLATE = """
 <style>
 __FONT_IMPORT__
 :root {
-    /* Unified Design Tokens */
     --bg: #090D16;
     --surface-1: #0F1522;
     --surface-2: #141B2A;
@@ -2013,17 +2061,24 @@ __FONT_IMPORT__
     --border-default: rgba(148, 163, 184, 0.16);
     --border-strong: rgba(148, 163, 184, 0.24);
 
-    /* Legacy Mappings to ensure 100% backward compatibility */
     --primary-1: #8B5CF6;
     --primary-2: #EC4899;
     --accent: #A855F7;
-    --ink: #F5F7FB;
-    --muted: #94A3B8;
-    --bg-dark: #090D16;
+    --primary-gradient: linear-gradient(135deg, var(--primary), var(--accent));
+    --bg-dark: var(--bg);
     --bg-gradient: linear-gradient(180deg, #090D16 0%, #0F1522 50%, #141B2A 100%);
-    --card-bg: #0F1522;
-    --card-border: rgba(148, 163, 184, 0.16);
-    --glow: rgba(139, 92, 246, 0.18);
+    --surface: var(--surface-1);
+    --surface-soft: var(--surface-2);
+    --panel: var(--surface-1);
+    --panel-soft: var(--surface-2);
+    --border: var(--border-default);
+    --ink: var(--text-primary);
+    --muted: var(--text-muted);
+    --accent-soft: var(--primary-soft);
+    --card-bg: var(--surface-1);
+    --card-border: var(--border-default);
+    --glow: var(--primary-glow);
+    --shadow: rgba(2, 6, 23, 0.42);
 }
 
 * {
@@ -2037,6 +2092,16 @@ html, body, .stApp {
     background: var(--bg-gradient);
     background-attachment: fixed;
     min-height: 100vh;
+    color: var(--text-primary);
+}
+
+h1, h2, h3, h4, h5, h6 {
+    color: var(--text-primary) !important;
+}
+
+label, [data-testid="stBaseWidgetLabel"], .stMarkdown p, .stCaption {
+    color: var(--text-secondary) !important;
+    font-weight: 600 !important;
 }
 
 .stApp::before {
@@ -2065,9 +2130,9 @@ html, body, .stApp {
 div[data-baseweb="input"] input,
 div[data-baseweb="select"] select,
 textarea {
-    background: rgba(30, 41, 59, 0.8) !important;
-    color: var(--ink) !important;
-    border: 1px solid var(--card-border) !important;
+    background: var(--surface-input) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-default) !important;
     border-radius: 12px !important;
     font-size: 0.98rem;
     line-height: 1.6;
@@ -2078,7 +2143,7 @@ textarea {
 
 div[data-baseweb="input"] input::placeholder,
 textarea::placeholder {
-    color: var(--muted) !important;
+    color: var(--text-muted) !important;
     opacity: 0.8 !important;
 }
 
@@ -2088,13 +2153,13 @@ textarea:focus {
     border-color: var(--accent) !important;
     box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.3), 0 4px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
     outline: none !important;
-    background: rgba(30, 41, 59, 0.95) !important;
+    background: var(--surface-2) !important;
 }
 
 [data-testid="stPills"] button,
 [data-testid="stRadio"] > div > label {
-    background: rgba(30, 41, 59, 0.6) !important;
-    color: var(--ink) !important;
+    background: var(--surface-2) !important;
+    color: var(--text-primary) !important;
     border: 1px solid var(--card-border) !important;
     border-radius: 50px !important;
     backdrop-filter: blur(10px);
@@ -2152,6 +2217,81 @@ div.stButton > button:hover {
     box-shadow: 0 12px 35px rgba(139, 92, 246, 0.6), 0 0 50px rgba(139, 92, 246, 0.3);
 }
 
+.artifact-shell {
+    background: linear-gradient(180deg, var(--surface-1), var(--surface-2));
+    border: 1px solid var(--border-default);
+    border-radius: 18px;
+    padding: 1rem 1rem 0.9rem;
+    margin: 0.75rem 0 1rem;
+    box-shadow: 0 10px 32px rgba(2, 6, 23, 0.18), 0 0 18px rgba(139, 92, 246, 0.12);
+    position: relative;
+    overflow: hidden;
+}
+
+.artifact-shell::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, rgba(139, 92, 246, 1), rgba(168, 85, 247, 0.8), rgba(236, 72, 153, 0.8));
+}
+
+.artifact-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+}
+
+.artifact-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 28px;
+    padding: 0.38rem 0.72rem;
+    border-radius: 999px;
+    background: rgba(139, 92, 246, 0.12);
+    border: 1px solid rgba(139, 92, 246, 0.26);
+    color: #C4B5FD;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.artifact-meta {
+    color: #CBD5E1;
+    font-size: 0.76rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.artifact-body {
+    color: var(--text-secondary);
+    font-size: 0.96rem;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.artifact-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    margin-top: 0.9rem;
+}
+
+div[data-testid="stChatMessage"] {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 16px;
+    padding: 0.8rem 0.9rem;
+    box-shadow: 0 8px 24px rgba(2, 6, 23, 0.12);
+}
+
 .premium-card {
     background: var(--card-bg);
     border-radius: 20px;
@@ -2192,13 +2332,13 @@ div.stButton > button:hover {
     margin: 0 0 16px 0;
     font-size: 1.2rem;
     font-weight: 800;
-    color: var(--ink);
+    color: var(--text-primary);
     line-height: 1.6;
     text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
 }
 
 .premium-card .meta {
-    color: var(--muted);
+    color: var(--text-secondary);
     font-size: 0.94rem;
     line-height: 1.9;
     margin-bottom: 14px;
@@ -2223,8 +2363,8 @@ div.stButton > button:hover {
 
 .premium-card ol {
     margin: 0;
-    padding-right: 24px;
-    color: var(--ink);
+    padding-inline-start: 24px;
+    color: var(--text-secondary);
     line-height: 1.9;
 }
 
@@ -2267,18 +2407,19 @@ div.stButton > button:hover {
 
 .ts-hero h1,
 .ts-hero p {
-    color: var(--ink) !important;
+    color: var(--text-primary) !important;
 }
 
 .ts-hero .accent {
-    background: linear-gradient(90deg, var(--primary-1), var(--accent), var(--primary-2));
+    color: var(--primary-hover);
+    background: linear-gradient(135deg, #A78BFA 0%, #8B5CF6 100%);
     -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
     background-clip: text;
-    color: transparent;
 }
 
 .ts-section h2 {
-    color: var(--ink) !important;
+    color: var(--text-primary) !important;
 }
 
 .ts-paywall {
@@ -2290,7 +2431,7 @@ div.stButton > button:hover {
 }
 
 .ts-paywall-inner {
-    background: rgba(30, 41, 59, 0.9);
+    background: var(--surface-2);
     border-radius: 20px;
     padding: 2.5rem;
     backdrop-filter: blur(20px);
@@ -3061,7 +3202,7 @@ div.stButton > button:hover {
 
 .ts-outline {
     margin: 0;
-    padding-right: 20px;
+    padding-inline-start: 20px;
     color: var(--ink);
     line-height: 1.9;
 }
@@ -3084,16 +3225,23 @@ div.stButton > button:hover {
 }
 
 .ts-lang-bar {
-    text-align: center;
-    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    margin: 0 0 0.75rem;
+    padding-top: 0.15rem;
+    text-align: __ALIGN__;
 }
 
 .ts-lang-bar .label {
     display: inline-block;
-    font-size: 0.85rem;
+    font-size: 0.72rem;
     font-weight: 700;
-    color: var(--muted);
-    margin-bottom: 0.5rem;
+    color: var(--text-secondary);
+    margin-bottom: 0;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
 }
 
 .ts-chips-label {
@@ -3230,7 +3378,25 @@ def render_html(markup: str) -> None:
 
 
 def inject_custom_header() -> None:
-    """Injects a premium SaaS-style top navigation bar with brand and features."""
+    """Landing header only; app navigation is rendered via the app shell and sidebar."""
+    if st.session_state.get("app_mode") == "app":
+        render_html(
+            """
+            <style>
+            .stApp { padding-top: 0 !important; }
+            header { display: none !important; }
+            footer { display: none !important; }
+            [data-testid="stToolbar"] { display: none !important; }
+            </style>
+            """
+        )
+        return
+
+    nav_home = t("nav.home")
+    nav_tools = t("nav.tools")
+    nav_how = t("nav.how")
+    nav_pricing = t("nav.pricing")
+    nav_faq = t("nav.faq")
     render_html(
         f"""
         <style>
@@ -3239,10 +3405,10 @@ def inject_custom_header() -> None:
             top: 0;
             z-index: 9999;
             width: 100%;
-            background: rgba(15, 23, 42, 0.88);
-            border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-            backdrop-filter: blur(18px);
-            -webkit-backdrop-filter: blur(18px);
+            background: rgba(9, 14, 24, 0.72);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
             margin: 0;
             padding: 0.8rem 0;
         }}
@@ -3265,20 +3431,20 @@ def inject_custom_header() -> None:
         }}
 
         .ts-brand-mark {{
-            width: 38px;
-            height: 38px;
-            border-radius: 12px;
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, #8B5CF6, #A855F7, #EC4899);
+            background: linear-gradient(135deg, #8B5CF6, #7C3AED);
             color: white;
             font-weight: 800;
-            box-shadow: 0 12px 26px rgba(139, 92, 246, 0.35);
+            box-shadow: 0 8px 18px rgba(124, 58, 237, 0.22);
         }}
 
         .ts-brand-text {{
-            font-size: 1.1rem;
+            font-size: 1.05rem;
             font-weight: 800;
             color: #F8FAFC;
             letter-spacing: 0.02em;
@@ -3287,18 +3453,57 @@ def inject_custom_header() -> None:
         .ts-topbar-nav {{
             display: flex;
             align-items: center;
-            gap: 1.5rem;
+            gap: 1.3rem;
             color: rgba(226, 232, 240, 0.82);
-            font-size: 0.9rem;
+            font-size: 0.88rem;
             font-weight: 600;
         }}
 
-        .ts-topbar-nav span {{
+        .ts-topbar-nav a {{
             display: inline-flex;
             align-items: center;
             justify-content: center;
             min-height: 2.2rem;
-            cursor: default;
+            color: rgba(226, 232, 240, 0.82);
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.2s ease;
+        }}
+
+        .ts-topbar-nav a:hover {{
+            color: #F8FAFC;
+        }}
+
+        .ts-topbar-actions {{
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }}
+
+        .ts-pill-btn {{
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 38px;
+            padding: 0.55rem 0.9rem;
+            border-radius: 999px;
+            border: 1px solid rgba(148, 163, 184, 0.15);
+            background: rgba(15, 23, 42, 0.6);
+            color: #E2E8F0;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-decoration: none;
+        }}
+
+        .ts-pill-btn.primary {{
+            border: none;
+            background: linear-gradient(135deg, #8B5CF6, #7C3AED);
+            color: #ffffff;
+        }}
+
+        html {{
+            scroll-behavior: smooth;
+            scroll-padding-top: 88px;
         }}
 
         .stApp {{
@@ -3313,20 +3518,23 @@ def inject_custom_header() -> None:
         [data-testid="stToolbar"] {{
             display: none !important;
         }}
-        [data-testid="stSidebar"] {{
-            display: none !important;
-        }}
         </style>
-        <div class="ts-topbar">
+        <div class="ts-topbar" id="top">
             <div class="ts-topbar-shell">
                 <div class="ts-brand-wrap">
-                    <div class="ts-brand-mark">⚡</div>
+                    <div class="ts-brand-mark">T</div>
                     <div class="ts-brand-text">TubeSpark</div>
                 </div>
                 <div class="ts-topbar-nav">
-                    <span>Features</span>
-                    <span>How it works</span>
-                    <span>Pricing</span>
+                    <a href="#home">{html_escape(nav_home)}</a>
+                    <a href="#tools">{html_escape(nav_tools)}</a>
+                    <a href="#how-it-works">{html_escape(nav_how)}</a>
+                    <a href="#pricing">{html_escape(nav_pricing)}</a>
+                    <a href="#faq">{html_escape(nav_faq)}</a>
+                </div>
+                <div class="ts-topbar-actions">
+                    <a href="#lang-switcher" class="ts-pill-btn">{html_escape(t('lang.switch'))}</a>
+                    <a href="#workspace" class="ts-pill-btn primary">{html_escape(t('nav.start'))}</a>
                 </div>
             </div>
         </div>
@@ -3379,28 +3587,89 @@ def inject_styles() -> None:
         }
 
         .stButton > button {
-            background: linear-gradient(135deg, #8B5CF6, #A855F7) !important;
+            background: var(--primary-gradient) !important;
             color: #FFFFFF !important;
-            font-size: 0.96rem !important;
+            font-size: 0.9rem !important;
             font-weight: 700 !important;
             border: none !important;
             border-radius: 12px !important;
-            min-height: 42px !important;
-            padding: 0.55rem 1.05rem !important;
+            min-height: 38px !important;
+            padding: 0.5rem 0.9rem !important;
             width: auto !important;
             text-align: center !important;
-            box-shadow: 0 12px 24px rgba(139, 92, 246, 0.28) !important;
+            box-shadow: 0 8px 24px rgba(139, 92, 246, 0.18) !important;
         }
 
         .stButton > button:hover {
-            filter: brightness(1.06);
-            box-shadow: 0 16px 32px rgba(139, 92, 246, 0.35) !important;
+            filter: brightness(1.04);
+            box-shadow: 0 12px 28px rgba(139, 92, 246, 0.22) !important;
+        }
+
+        .ts-hero-actions a.ts-primary-btn {
+            background: var(--primary-gradient) !important;
+            color: var(--text-primary) !important;
+            border-color: transparent !important;
+        }
+
+        .ts-hero-actions a.ts-secondary-btn {
+            background: var(--surface-2) !important;
+            color: var(--text-primary) !important;
+            border-color: var(--border-default) !important;
+        }
+
+        .ts-topbar-nav a {
+            color: var(--text-secondary) !important;
+        }
+
+        .ts-topbar-nav a:hover {
+            color: var(--text-primary) !important;
+        }
+
+        .ts-tool-surface,
+        .ts-workspace-preview,
+        .ts-chat-shell,
+        [data-testid="stChatMessage"] {
+            background: var(--surface-1) !important;
+            border-color: var(--border-default) !important;
+        }
+
+        [data-testid="stSidebarCollapsedControl"] {
+            position: fixed !important;
+            right: 0.85rem !important;
+            top: 0.85rem !important;
+            z-index: 1001 !important;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
+
+        [data-testid="stSidebarCollapsedControl"] > button {
+            width: 42px !important;
+            height: 42px !important;
+            min-width: 42px !important;
+            min-height: 42px !important;
+            padding: 0 !important;
+            border-radius: 12px !important;
+            background: rgba(15, 23, 42, 0.88) !important;
+            border: 1px solid rgba(148, 163, 184, 0.18) !important;
+            color: #F8FAFC !important;
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.2) !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            transform: none !important;
+        }
+
+        [data-testid="stSidebarCollapsedControl"] > button:hover {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(168, 85, 247, 0.18)) !important;
+            border-color: rgba(139, 92, 246, 0.35) !important;
+            box-shadow: 0 10px 24px rgba(124, 58, 237, 0.18) !important;
         }
 
         .ts-shell {
             max-width: 1280px;
             margin: 0 auto;
-            padding: 2rem 1.25rem 3rem;
+            padding: 1.5rem 1.25rem 3rem;
         }
 
         .ts-hero-panel {
@@ -3415,46 +3684,43 @@ def inject_styles() -> None:
             display: inline-flex;
             align-items: center;
             width: fit-content;
-            padding: 0.48rem 0.8rem;
+            padding: 0.42rem 0.75rem;
             border-radius: 999px;
-            background: rgba(139, 92, 246, 0.14);
-            border: 1px solid rgba(168, 85, 247, 0.25);
+            background: rgba(124, 58, 237, 0.12);
+            border: 1px solid rgba(124, 58, 237, 0.18);
             color: #C4B5FD;
-            font-size: 0.72rem;
+            font-size: 0.7rem;
             font-weight: 800;
             letter-spacing: 0.08em;
             text-transform: uppercase;
         }
 
         .ts-hero-title {
-            margin: 1.15rem 0 1rem;
-            font-size: clamp(2.4rem, 4vw, 4.1rem);
-            line-height: 1.04;
+            margin: 1.1rem 0 1rem;
+            font-size: clamp(2.2rem, 4vw, 4rem);
+            line-height: 1.06;
             letter-spacing: -0.05em;
             font-weight: 900;
             color: #F8FAFC;
         }
 
         .ts-hero-title .accent {
-            background: linear-gradient(90deg, #8B5CF6 0%, #A78BFA 35%, #EC4899 100%);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
+            color: #C4B5FD;
         }
 
         .ts-hero-copy {
             max-width: 620px;
             margin: 0 0 1.5rem;
-            color: rgba(226, 232, 240, 0.78);
-            font-size: 1.06rem;
-            line-height: 1.8;
+            color: #E2E8F0;
+            font-size: 1.02rem;
+            line-height: 1.7;
         }
 
         .ts-hero-actions {
             display: flex;
             flex-wrap: wrap;
             gap: 0.8rem;
-            margin-bottom: 1.3rem;
+            margin-bottom: 1.2rem;
         }
 
         .ts-primary-btn,
@@ -3473,59 +3739,103 @@ def inject_styles() -> None:
         }
 
         .ts-primary-btn {
-            background: linear-gradient(135deg, #8B5CF6, #A855F7);
+            background: var(--primary-gradient);
             color: #FFFFFF;
-            box-shadow: 0 12px 26px rgba(139, 92, 246, 0.3);
+            box-shadow: 0 8px 18px var(--primary-glow);
         }
 
         .ts-secondary-btn {
-            background: rgba(15, 23, 42, 0.65);
-            color: #F8FAFC;
-            border-color: rgba(148, 163, 184, 0.2);
+            background: var(--surface-2);
+            color: var(--text-primary);
+            border-color: var(--border-default);
         }
 
         .ts-hero-stats {
             display: flex;
             flex-wrap: wrap;
-            gap: 1.5rem;
-            margin-top: 0.25rem;
+            gap: 1.4rem;
+            margin-top: 0.2rem;
             color: #E2E8F0;
         }
 
         .ts-stat {
             display: flex;
             flex-direction: column;
-            gap: 0.2rem;
+            gap: 0.15rem;
             min-width: 120px;
         }
 
         .ts-stat strong {
-            font-size: 1.5rem;
+            font-size: 1.35rem;
             font-weight: 800;
             color: #F8FAFC;
         }
 
         .ts-stat span {
-            font-size: 0.8rem;
-            color: rgba(226, 232, 240, 0.72);
+            font-size: 0.76rem;
+            color: #A6B0C3;
         }
 
         .ts-tool-surface {
-            background: rgba(15, 23, 42, 0.72);
-            border: 1px solid rgba(148, 163, 184, 0.18);
-            border-radius: 24px;
-            box-shadow: 0 30px 60px rgba(2, 6, 23, 0.45);
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            border-radius: 22px;
+            box-shadow: 0 16px 36px rgba(2, 6, 23, 0.22);
             overflow: hidden;
             min-height: 100%;
         }
 
-        .ts-side-panel {
-            background: transparent;
-            border: none;
-            border-radius: 0;
-            padding: 0;
-            box-shadow: none;
-            backdrop-filter: none;
+        .ts-workspace-preview {
+            padding: 1rem;
+            border-radius: 20px;
+            background: rgba(15, 23, 42, 0.72);
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            box-shadow: 0 12px 28px rgba(2, 6, 23, 0.14);
+        }
+
+        .ts-workspace-kicker {
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #C4B5FD;
+            margin-bottom: 0.55rem;
+        }
+
+        .ts-workspace-title {
+            margin: 0 0 0.45rem;
+            font-size: 1.3rem;
+            font-weight: 800;
+            color: #F8FAFC;
+        }
+
+        .ts-workspace-copy {
+            margin: 0;
+            color: #DCE5F5;
+            line-height: 1.65;
+            font-size: 0.94rem;
+        }
+
+        .ts-preview-chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .ts-preview-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 32px;
+            padding: 0.45rem 0.75rem;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            color: #E2E8F0;
+            font-size: 0.74rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
         }
 
         .ts-chat-shell {
@@ -3535,21 +3845,6 @@ def inject_styles() -> None:
             padding: 1.15rem;
             background: rgba(15, 23, 42, 0.88);
             min-height: 100%;
-        }
-
-        .ts-workspace-panel {
-            background: rgba(15, 23, 42, 0.5);
-            border: none;
-            border-radius: 0;
-            padding: 1rem 1rem 0.5rem;
-            box-shadow: none;
-            overflow: hidden;
-        }
-
-        .ts-divider {
-            height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(167, 139, 250, 0.6), transparent);
-            margin: 1rem 0 1.3rem;
         }
 
         .ts-badges-row {
@@ -3566,12 +3861,12 @@ def inject_styles() -> None:
             border-radius: 999px;
             font-size: 0.72rem;
             font-weight: 700;
-            border: 1px solid rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.08);
         }
 
-        .ts-badge-pill.seo { background: rgba(96, 165, 250, 0.16); color: #bfdbfe; }
-        .ts-badge-pill.ctr { background: rgba(52, 211, 153, 0.13); color: #bbf7d0; }
-        .ts-badge-pill.comp { background: rgba(250, 204, 21, 0.12); color: #fde68a; }
+        .ts-badge-pill.seo { background: rgba(96, 165, 250, 0.12); color: #bfdbfe; }
+        .ts-badge-pill.ctr { background: rgba(52, 211, 153, 0.10); color: #bbf7d0; }
+        .ts-badge-pill.comp { background: rgba(250, 204, 21, 0.10); color: #fde68a; }
 
         .ts-auto-report {
             display: flex;
@@ -3620,7 +3915,7 @@ def _regenerate_on_mode_change() -> None:
 def render_language_switcher() -> None:
     """Language selector pinned at the top of the page; drives the whole interface."""
     render_html(
-        f'<div class="ts-lang-bar"><span class="label">{html_escape(t("lang.label"))}</span></div>'
+        f'<div id="lang-switcher" class="ts-lang-bar"><span class="label">{html_escape(t("lang.label"))}</span></div>'
     )
     st.pills(
         t("lang.switch"),
@@ -3628,7 +3923,7 @@ def render_language_switcher() -> None:
         format_func=lambda code: LANGUAGE_LABELS[code],
         selection_mode="single",
         key="lang",
-        label_visibility="collapsed",
+        label_visibility="visible",
         on_change=_regenerate_on_mode_change,
     )
 
@@ -3642,15 +3937,86 @@ def render_hero() -> None:
             <h1 class="ts-hero-title">{html_escape(t("hero.title_pre"))}<span class="accent"> {html_escape(t("hero.title_accent"))}</span></h1>
             <p class="ts-hero-copy">{html_escape(t("hero.subtitle"))}</p>
             <div class="ts-hero-actions">
-                <a href="#workspace" class="ts-primary-btn">Start free</a>
-                <a href="#how-it-works" class="ts-secondary-btn">See how it works</a>
+                <a href="#workspace" class="ts-primary-btn">{html_escape(t("nav.start"))}</a>
+                <a href="#how-it-works" class="ts-secondary-btn">{html_escape(t("nav.how"))}</a>
             </div>
             <div class="ts-hero-stats">
-                <div class="ts-stat"><strong>12.4k+</strong><span>ideas generated</span></div>
-                <div class="ts-stat"><strong>4.9/5</strong><span>creator rating</span></div>
-                <div class="ts-stat"><strong>3 min</strong><span>to workflow</span></div>
+                <div class="ts-stat"><strong>AI-powered</strong><span>content creation</span></div>
+                <div class="ts-stat"><strong>3+ tools</strong><span>core workflows</span></div>
+                <div class="ts-stat"><strong>Fast</strong><span>generation</span></div>
             </div>
         </div>
+        """
+    )
+
+
+def render_landing_tool_cards() -> None:
+    """Adds a compact SaaS-style tools overview section without creating new backend logic."""
+    render_html(
+        f"""
+        <section id="tools" style="margin-top: 2rem; margin-bottom: 2rem;">
+            <div style="margin-bottom: 1.2rem;">
+                <div style="font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: #C4B5FD; font-weight: 800;">{html_escape(t("landing.tools.kicker"))}</div>
+                <h2 style="margin: 0.5rem 0 0; font-size: clamp(1.7rem, 2.5vw, 2.5rem); color: #F8FAFC; font-weight: 800;">{html_escape(t("landing.tools.title"))}</h2>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+                <div class="premium-card" style="padding: 1.25rem; margin: 0; min-height: 180px;">
+                    <div class="badge">01</div>
+                    <h3>{html_escape(t("tool.idea.title"))}</h3>
+                    <div class="meta">{html_escape(t("tool.idea.copy"))}</div>
+                    <a href="#workspace" class="ts-primary-btn" style="margin-top: 0.5rem;">{html_escape(t("tool.use"))}</a>
+                </div>
+                <div class="premium-card" style="padding: 1.25rem; margin: 0; min-height: 180px;">
+                    <div class="badge">02</div>
+                    <h3>{html_escape(t("tool.script.title"))}</h3>
+                    <div class="meta">{html_escape(t("tool.script.copy"))}</div>
+                    <a href="#workspace" class="ts-primary-btn" style="margin-top: 0.5rem;">{html_escape(t("tool.use"))}</a>
+                </div>
+                <div class="premium-card" style="padding: 1.25rem; margin: 0; min-height: 180px;">
+                    <div class="badge">03</div>
+                    <h3>{html_escape(t("tool.seo.title"))}</h3>
+                    <div class="meta">{html_escape(t("tool.seo.copy"))}</div>
+                    <a href="#workspace" class="ts-primary-btn" style="margin-top: 0.5rem;">{html_escape(t("tool.use"))}</a>
+                </div>
+                <div class="premium-card" style="padding: 1.25rem; margin: 0; min-height: 180px;">
+                    <div class="badge">04</div>
+                    <h3>{html_escape(t("tool.thumbnail.title"))}</h3>
+                    <div class="meta">{html_escape(t("tool.thumbnail.copy"))}</div>
+                    <a href="#workspace" class="ts-primary-btn" style="margin-top: 0.5rem;">{html_escape(t("tool.use"))}</a>
+                </div>
+            </div>
+        </section>
+        """
+    )
+
+
+def render_how_it_works() -> None:
+    """Simple three-step process section for the landing page."""
+    render_html(
+        f"""
+        <section id="how-it-works" style="margin: 2.5rem 0;">
+            <div style="margin-bottom: 1.3rem;">
+                <div style="font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: #C4B5FD; font-weight: 800;">{html_escape(t("landing.how.kicker"))}</div>
+                <h2 style="margin: 0.5rem 0 0; font-size: clamp(1.7rem, 2.5vw, 2.5rem); color: #F8FAFC; font-weight: 800;">{html_escape(t("landing.how.title"))}</h2>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;">
+                <div class="premium-card" style="padding: 1.25rem; margin: 0; min-height: 160px;">
+                    <div class="badge">01</div>
+                    <h3>{html_escape(t("how.idea.title"))}</h3>
+                    <div class="meta">{html_escape(t("how.idea.copy"))}</div>
+                </div>
+                <div class="premium-card" style="padding: 1.25rem; margin: 0; min-height: 160px;">
+                    <div class="badge">02</div>
+                    <h3>{html_escape(t("how.create.title"))}</h3>
+                    <div class="meta">{html_escape(t("how.create.copy"))}</div>
+                </div>
+                <div class="premium-card" style="padding: 1.25rem; margin: 0; min-height: 160px;">
+                    <div class="badge">03</div>
+                    <h3>{html_escape(t("how.optimize.title"))}</h3>
+                    <div class="meta">{html_escape(t("how.optimize.copy"))}</div>
+                </div>
+            </div>
+        </section>
         """
     )
 
@@ -3682,119 +4048,322 @@ def render_metric_badges(*, seo_score: int = 85, ctr: str = "High", competition:
 
 
 def _sync_chat_state(payload: dict[str, str]) -> None:
-    """Transfers the structured Copilot output into the main session state."""
+    """Compatibility bridge: sync legacy chat payloads into the project-context model."""
     if not payload:
         return
 
+    ctx = ensure_project_context()
     if payload.get("niche"):
         st.session_state["niche"] = payload["niche"]
         st.session_state["ideas_niche"] = payload["niche"]
+        ctx["topic"] = payload["niche"]
+        ctx["idea"] = payload["niche"]
+        ctx["project_idea"] = payload["niche"]
     if payload.get("script_niche"):
         st.session_state["script_niche"] = payload["script_niche"]
     if payload.get("script_idea"):
         st.session_state["script_idea"] = payload["script_idea"]
+        ctx["idea"] = payload["script_idea"]
+        ctx["project_idea"] = payload["script_idea"]
+        ctx["topic"] = payload["script_idea"]
     if payload.get("seo_topic"):
         st.session_state["seo_topic"] = payload["seo_topic"]
+        ctx["topic"] = payload["seo_topic"]
+        ctx["project_idea"] = payload["seo_topic"]
     if payload.get("seo_niche"):
         st.session_state["seo_niche"] = payload["seo_niche"]
+        ctx["platform"] = payload["seo_niche"]
+        ctx["selected_platform"] = payload["seo_niche"]
     if payload.get("video_topic"):
         st.session_state["seo_topic"] = payload["video_topic"]
+        ctx["topic"] = payload["video_topic"]
+        ctx["project_idea"] = payload["video_topic"]
 
 
-def _extract_key_value_pairs(prompt: str) -> dict[str, str]:
-    """Heuristic extractor for simple structured chat prompts."""
-    text = prompt.strip()
+def _extract_topic_from_prompt(prompt: str) -> str:
+    """Extract a plausible topic from a natural-language prompt using a light heuristic."""
+    text = (prompt or "").strip()
     if not text:
+        return ""
+    lower = text.lower()
+    for marker in ("about ", "on ", "for ", "regarding ", "about:", "topic:"):
+        idx = lower.find(marker)
+        if idx != -1:
+            candidate = text[idx + len(marker):].strip()
+            candidate = candidate.strip("\"'`")
+            if candidate:
+                return candidate
+    if "i want to create content about" in lower:
+        return text.split("about", 1)[1].strip(" \"'")
+    phrases = ["create ", "write ", "make ", "build ", "generate "]
+    for phrase in phrases:
+        if phrase in lower:
+            rest = text.lower().split(phrase, 1)[1].strip()
+            if rest:
+                return rest[:120]
+    return text[:120]
+
+
+def _detect_platform(prompt: str, fallback: str = DEFAULT_PLATFORM) -> str:
+    """Identify the current platform from the prompt or the project context."""
+    text = (prompt or "").lower()
+    platform_map = {
+        "youtube": "YouTube",
+        "shorts": "YouTube Shorts",
+        "tiktok": "TikTok",
+        "reels": "Instagram Reels",
+        "instagram": "Instagram",
+        "facebook": "Facebook",
+        "linkedin": "LinkedIn",
+        "x": "X / Twitter",
+        "twitter": "X / Twitter",
+        "podcast": "Podcast",
+        "blog": "Blog",
+    }
+    for key, value in platform_map.items():
+        if key in text:
+            return value
+    return fallback or DEFAULT_PLATFORM
+
+
+def _detect_content_type(prompt: str, fallback: str = "video") -> str:
+    """Determine the type of asset the user is asking for."""
+    text = (prompt or "").lower()
+    mapping = {
+        "seo": "seo",
+        "keyword": "seo",
+        "search": "seo",
+        "thumbnail": "thumbnail",
+        "visual": "visual",
+        "script": "script",
+        "title": "title",
+        "idea": "idea",
+        "hook": "idea",
+        "description": "description",
+        "hashtag": "hashtags",
+    }
+    for key, value in mapping.items():
+        if key in text:
+            return value
+    return fallback
+
+
+def _apply_prompt_to_project_context(prompt: str) -> dict[str, Any]:
+    """Read a user message and save only the relevant structured project data."""
+    cleaned = (prompt or "").strip()
+    if not cleaned:
         return {}
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    if not lines:
-        return {}
 
-    result: dict[str, str] = {}
-    for line in lines:
-        if ":" in line:
-            key, value = line.split(":", 1)
-            key = key.strip().lower().replace(" ", "_")
-            value = value.strip()
-            if key and value:
-                result[key] = value
-    if not result:
-        candidate = text
-        if len(candidate) > 100:
-            candidate = candidate[:100]
-        result["script_idea"] = text
-        result["niche"] = st.session_state.get("niche", "general")
-    return result
+    ctx = ensure_project_context()
+    topic = _extract_topic_from_prompt(cleaned) or ctx.get("topic") or ctx.get("idea") or ""
+    platform = _detect_platform(cleaned, ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
+    content_type = _detect_content_type(cleaned, ctx.get("content_type") or "video")
+
+    update_project_context(
+        topic=topic,
+        idea=ctx.get("idea") or topic,
+        project_idea=ctx.get("project_idea") or topic,
+        platform=platform,
+        selected_platform=platform,
+        content_type=content_type,
+    )
+
+    return {
+        "topic": topic,
+        "platform": platform,
+        "content_type": content_type,
+    }
 
 
-def _copilot_reply(prompt: str, lang: str) -> str:
-    """Generates a short structured Copilot response and syncs it into session state."""
+def _chat_orchestrator(prompt: str, lang: str) -> str:
+    """A simple orchestrator that reads the current project context and routes the request to the right existing function when the user makes a clear intent request."""
     cleaned = (prompt or "").strip()
     if not cleaned:
         return "Please tell me what you want to create."
 
-    if groq_is_ready():
-        try:
-            system = (
-                "You are a helpful YouTube content strategist. Answer in a short, practical way. "
-                "Return a JSON object with keys: niche, script_idea, seo_topic, seo_niche, summary."
-            )
-            payload = _groq_json(system, f"User request: {cleaned}", temperature=0.7)
-            if isinstance(payload, dict):
-                data = {
-                    "niche": _model_text(payload.get("niche"), 80),
-                    "script_idea": _model_text(payload.get("script_idea"), 220),
-                    "seo_topic": _model_text(payload.get("seo_topic"), 120),
-                    "seo_niche": _model_text(payload.get("seo_niche"), 80),
-                    "summary": _model_text(payload.get("summary"), 280),
-                }
-                _sync_chat_state(data)
-                st.session_state["chat_report"] = {
-                    "summary": data.get("summary") or "AI Copilot synced the request into the workspace.",
-                    "idea": data.get("niche") or "General",
-                    "script": data.get("script_idea") or cleaned,
-                    "seo_topic": data.get("seo_topic") or cleaned,
-                    "seo_niche": data.get("seo_niche") or data.get("niche") or "General",
-                    "thumbnail_prompt": f"Create a cinematic YouTube thumbnail for '{data.get('seo_topic') or cleaned}' in the niche '{data.get('seo_niche') or data.get('niche') or 'general'}'."
-                }
-                return data.get("summary") or "I’ve updated the main fields based on your request."
-        except Exception:
-            pass
+    ctx = ensure_project_context()
+    parsed = _apply_prompt_to_project_context(cleaned)
+    lower = cleaned.lower()
+    topic = parsed.get("topic") or ctx.get("topic") or ctx.get("idea") or ""
+    platform = parsed.get("platform") or ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM
+    niche = ctx.get("topic") or ctx.get("idea") or topic or "general"
 
-    words = cleaned.split()
-    niche = st.session_state.get("niche") or "general"
-    topic = " ".join(words[:8])
-    summary = (
-        "I’ve mapped your idea into the main workflow. The niche has been prepared and the script/SEO fields can now be updated from the same content."
-        if lang == "en"
-        else "لقد ربطت فكرتك بمسار العمل الرئيسي. تم تجهيز المجال ويمكن الآن تحديث حقول السكربت والسيو من نفس المحتوى."
-        if lang == "ar"
-        else "J’ai relié ton idée au flux principal. Le secteur est prêt et les champs de script/SEO peuvent maintenant être mis à jour depuis ce même contenu."
-    )
-    data = {
-        "niche": niche,
-        "script_idea": cleaned,
-        "seo_topic": topic,
-        "seo_niche": niche,
-        "summary": summary,
-    }
-    _sync_chat_state(data)
-    st.session_state["chat_report"] = {
-        "summary": summary,
-        "idea": niche,
-        "script": cleaned,
-        "seo_topic": topic,
-        "seo_niche": niche,
-        "thumbnail_prompt": f"Create a cinematic YouTube thumbnail for '{topic}' in the niche '{niche}'."
-    }
-    return summary
+    if any(word in lower for word in ("seo", "keyword", "keywords", "search")):
+        if topic:
+            result = _seo_from_groq(topic, niche, lang=current_lang())
+            update_project_context(topic=topic, platform=platform, content_type="seo", seo=result.seo_description, keywords=list(result.seo_tags))
+            st.session_state["seo_result"] = result
+            return (
+                "I used the current project context and generated SEO for the active topic. "
+                "It is now saved in the project context and ready to use in the SEO workspace."
+                if lang == "en"
+                else "استخدمت سياق المشروع الحالي وولّدت تحسين SEO للموضوع النشط. تم حفظه الآن في سياق المشروع وهو جاهز للاستخدام في مساحة SEO."
+                if lang == "ar"
+                else "J’ai utilisé le contexte du projet actuel pour générer le SEO du sujet actif. Il est maintenant enregistré dans le contexte du projet et prêt à être utilisé dans l’espace SEO."
+            )
+        return "I need a topic in the project context before I can generate SEO."
+
+    if any(word in lower for word in ("script", "voiceover", "narration")):
+        idea = ctx.get("idea") or ctx.get("project_idea") or topic or ""
+        if not idea:
+            return "I need an idea or topic in the project context before generating a script."
+        script = _script_from_groq(
+            niche,
+            idea,
+            platform=platform,
+            vibe="professional",
+            audience="general viewers",
+            lang=current_lang(),
+            duration="3-5min",
+        )
+        st.session_state["script_result"] = script
+        update_project_context(
+            topic=topic or idea,
+            idea=idea,
+            platform=platform,
+            content_type="script",
+            script=script.description,
+            description=script.description,
+            hashtags=list(script.hashtags),
+            keywords=list(script.keywords),
+        )
+        return "I generated a script using the current idea and saved it into the shared project context."
+
+    if any(word in lower for word in ("title", "headline", "idea")) and any(word in lower for word in ("generate", "create", "make", "write")):
+        ideas = generate_ideas(topic or niche, 3, platform=platform, lang=current_lang())
+        titles = [idea.title for idea in ideas]
+        update_project_context(topic=topic or niche, idea=titles[0] if titles else topic or niche, titles=titles, selected_title=titles[0] if titles else "", content_type="idea")
+        st.session_state["ideas"] = ideas
+        st.session_state["ideas_niche"] = topic or niche
+        return "I generated several title/idea options using the current project context and saved them in the project."
+
+    if any(word in lower for word in ("thumbnail", "visual", "cover", "design")):
+        prompt = (
+            f"Create a cinematic thumbnail concept for '{topic or ctx.get('topic') or 'the selected topic'}' "
+            f"for {platform}. Use high-contrast layout, readable typography, and a strong curiosity hook."
+        )
+        update_project_context(topic=topic or ctx.get("topic"), platform=platform, content_type="visual", visual_direction=prompt)
+        st.session_state["thumbnail_prompt"] = prompt
+        return "I created a visual direction for the current topic and saved it to the project context."
+
+    # Default: project-context read + update only. No regeneration unless user explicitly requests a specific asset.
+    if topic:
+        update_project_context(topic=topic, platform=platform, content_type=parsed.get("content_type") or ctx.get("content_type") or "video")
+        return (
+            f"I understood the project as: topic='{topic}', platform='{platform}'. I updated the current project context without regenerating the full workflow."
+            if lang == "en"
+            else f"فهمت المشروع كالتالي: الموضوع='{topic}'، المنصة='{platform}'. قمت بتحديث سياق المشروع الحالي دون إعادة توليد المسار بالكامل."
+            if lang == "ar"
+            else f"J’ai compris le projet comme: sujet='{topic}', plateforme='{platform}'. J’ai mis à jour le contexte du projet sans régénérer tout le workflow."
+        )
+
+    return "I can use the current project context, but I need either a topic or an active idea before I can route the request."
+
+
+def _copilot_reply(prompt: str, lang: str) -> str:
+    """Backwards-compatible Copilot response that routes through the project-aware orchestration logic."""
+    cleaned = (prompt or "").strip()
+    if not cleaned:
+        return "Please tell me what you want to create."
+
+    return _chat_orchestrator(cleaned, lang)
 
 
 def render_ai_chat_panel() -> None:
-    """Fixed chat panel on the right side of the micro-SaaS layout."""
+    """AI Chat acts as the central orchestrator for the project; it reads and reuses the current shared context instead of starting from zero."""
+    ensure_project_context()
     st.session_state.setdefault("copilot_messages", [
-        {"role": "assistant", "content": "مرحباً! أخبرني عن موضوعك أو فكرتك وسأقوم بمزامنتها في مساحة العمل."}
+        {"role": "assistant", "content": t("chat.welcome")}
     ])
+
+    ctx = ensure_project_context()
+    helpful_actions = []
+    topic = ctx.get("topic") or ctx.get("idea") or ctx.get("project_idea")
+    if topic and not ctx.get("titles"):
+        helpful_actions.append(t("chat.action.generate_ideas"))
+        helpful_actions.append(t("chat.action.generate_titles"))
+        helpful_actions.append(t("chat.action.create_script"))
+    if (ctx.get("script") or st.session_state.get("script_result")) and not (ctx.get("seo") or st.session_state.get("seo_result")):
+        helpful_actions.append(t("chat.action.create_seo"))
+        helpful_actions.append(t("chat.action.generate_keywords"))
+    if topic and not (ctx.get("visual_direction") or st.session_state.get("thumbnail_prompt")):
+        helpful_actions.append(t("chat.action.create_visual"))
+
+    if helpful_actions:
+        st.caption(t("chat.suggested_actions"))
+        cols = st.columns(min(len(helpful_actions), 3))
+        for idx, action in enumerate(helpful_actions):
+            with cols[idx % min(len(helpful_actions), 3)]:
+                if st.button(action, use_container_width=True, key=f"chat_action_{action.replace(' ', '_').lower()}"):
+                    if action == t("chat.action.generate_ideas"):
+                        ideas = generate_ideas(topic, 3, platform=ctx.get("platform") or DEFAULT_PLATFORM, lang=current_lang())
+                        st.session_state["ideas"] = ideas
+                        update_project_context(topic=topic, idea=ideas[0].title if ideas else topic, titles=[idea.title for idea in ideas], selected_title=ideas[0].title if ideas else "", content_type="idea")
+                        st.session_state["active_workspace"] = "Idea Generator"
+                    elif action == t("chat.action.generate_titles"):
+                        ideas = generate_ideas(topic, 3, platform=ctx.get("platform") or DEFAULT_PLATFORM, lang=current_lang())
+                        titles = [idea.title for idea in ideas]
+                        update_project_context(topic=topic, titles=titles, selected_title=titles[0] if titles else "", content_type="title")
+                        st.session_state["active_workspace"] = "Idea Generator"
+                    elif action == t("chat.action.create_script"):
+                        idea_source = ctx.get("selected_title") or ctx.get("idea") or ctx.get("project_idea") or topic
+                        if idea_source:
+                            result = _script_from_groq(topic, idea_source, platform=ctx.get("platform") or DEFAULT_PLATFORM, vibe="professional", audience="general viewers", lang=current_lang(), duration="3-5min")
+                            st.session_state["script_result"] = result
+                            update_project_context(topic=topic, idea=idea_source, script=result.description, description=result.description, hashtags=list(result.hashtags), keywords=list(result.keywords), content_type="script")
+                        st.session_state["active_workspace"] = "Script Writer"
+                    elif action == t("chat.action.create_seo"):
+                        seo_result = _seo_from_groq(topic, topic, lang=current_lang())
+                        st.session_state["seo_result"] = seo_result
+                        update_project_context(topic=topic, seo=seo_result.seo_description, keywords=list(seo_result.seo_tags), search_tags=list(seo_result.seo_tags), content_type="seo")
+                        st.session_state["active_workspace"] = "SEO Optimizer"
+                    elif action == t("chat.action.generate_keywords"):
+                        if not ctx.get("seo") and st.session_state.get("seo_result"):
+                            st.session_state["active_workspace"] = "SEO Optimizer"
+                        else:
+                            seo_result = _seo_from_groq(topic, topic, lang=current_lang())
+                            st.session_state["seo_result"] = seo_result
+                            update_project_context(topic=topic, seo=seo_result.seo_description, keywords=list(seo_result.seo_tags), search_tags=list(seo_result.seo_tags), content_type="seo")
+                            st.session_state["active_workspace"] = "SEO Optimizer"
+                    elif action == t("chat.action.create_visual"):
+                        prompt = f"Create a cinematic {ctx.get('platform') or DEFAULT_PLATFORM} visual concept for '{topic}'. Use a clear focal point, readable typography, and a strong curiosity hook."
+                        update_project_context(topic=topic, visual_direction=prompt, content_type="visual")
+                        st.session_state["thumbnail_prompt"] = prompt
+                        st.session_state["active_workspace"] = "Visual Prompt Studio"
+                    st.rerun()
+
+    action_cols = st.columns(4)
+    with action_cols[0]:
+        if st.button("Use in Idea Generator", use_container_width=True):
+            st.session_state["active_workspace"] = "Idea Generator"
+            update_project_context(topic=ctx.get("topic") or ctx.get("idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
+            st.rerun()
+    with action_cols[1]:
+        if st.button("Open Idea Evaluator", use_container_width=True):
+            st.session_state["active_workspace"] = "Idea Evaluator"
+            st.session_state["workspace_seo_topic"] = ctx.get("topic") or ctx.get("idea") or ""
+            st.session_state["workspace_seo_niche"] = ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM
+            update_project_context(topic=ctx.get("topic") or ctx.get("idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
+            st.rerun()
+    with action_cols[2]:
+        if st.button("Send to Script Writer", use_container_width=True):
+            st.session_state["active_workspace"] = "Script Writer"
+            update_project_context(topic=ctx.get("topic") or ctx.get("idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
+            st.rerun()
+    with action_cols[3]:
+        if st.button("Send to SEO Optimizer", use_container_width=True):
+            st.session_state["active_workspace"] = "SEO Optimizer"
+            update_project_context(topic=ctx.get("topic") or ctx.get("idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
+            st.rerun()
+    with action_cols[3]:
+        if st.button(t("workspace.save_to_project"), use_container_width=True):
+            prompt = st.session_state.get("main_ai_copilot_input", "")
+            if prompt.strip():
+                _apply_prompt_to_project_context(prompt)
+                st.success("The current request was saved into the project context.")
+            else:
+                st.info("Type a request first to save it into the project context.")
+
     st.markdown('<div class="ts-chat-shell">', unsafe_allow_html=True)
     for message in st.session_state["copilot_messages"]:
         with st.chat_message(message["role"]):
@@ -3803,17 +4372,17 @@ def render_ai_chat_panel() -> None:
     input_col, mic_col, send_col = st.columns([7, 2, 3])
     with input_col:
         st.text_input(
-            "AI Copilot",
+            t("chat.ai_copilot"),
             key="main_ai_copilot_input",
-            help="اكتب فكرة أو موضوع الفيديو الذي تريد إنشاؤه",
+            help="Describe the topic, request, or next step for the active project.",
             label_visibility="collapsed",
-            placeholder="اكتب طلبك هنا...",
+            placeholder=t("ui.placeholder"),
         )
     with mic_col:
-        if st.button("🎤", key="copilot_mic", help="تسجيل صوتي", use_container_width=True):
-            st.session_state["main_ai_copilot_input"] = "ملاحظة صوتية: أريد فكرة أقوى لقناة يوتيوب."
+        if st.button("🎤", key="copilot_mic", help="Voice note", use_container_width=True):
+            st.session_state["main_ai_copilot_input"] = "I want to create content about AI productivity for YouTube Shorts."
     with send_col:
-        if st.button("🚀", key="copilot_send", help="إرسال الرسالة", use_container_width=True):
+        if st.button("🚀", key="copilot_send", help="Send message", use_container_width=True):
             if st.session_state.get("main_ai_copilot_input", "").strip():
                 prompt = st.session_state["main_ai_copilot_input"].strip()
                 st.session_state["copilot_messages"].append({"role": "user", "content": prompt})
@@ -3823,7 +4392,33 @@ def render_ai_chat_panel() -> None:
                 st.session_state["copilot_messages"].append({"role": "assistant", "content": reply})
                 with st.chat_message("assistant"):
                     st.markdown(reply)
+                st.session_state["last_chat_reply"] = reply
                 st.session_state["main_ai_copilot_input"] = ""
+                render_artifact_card(
+                    "Project artifact",
+                    "Use the shared project context or send this output into the relevant workspace.",
+                    badge="Project artifact",
+                    meta="Context-aware output",
+                )
+                c1, c2, c3, c4 = st.columns(4)
+                with c1:
+                    if st.button("Use in Idea Generator", key="chat_use_content_studio", use_container_width=True):
+                        st.session_state["active_workspace"] = "Idea Generator"
+                        update_project_context(topic=ctx.get("topic") or ctx.get("idea") or ctx.get("project_idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
+                        st.rerun()
+                with c2:
+                    if st.button("Open Idea Evaluator", key="chat_send_seo", use_container_width=True):
+                        st.session_state["active_workspace"] = "Idea Evaluator"
+                        update_project_context(topic=ctx.get("topic") or ctx.get("idea") or ctx.get("project_idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
+                        st.rerun()
+                with c3:
+                    if st.button("Send to Script Writer", key="chat_send_visual", use_container_width=True):
+                        st.session_state["active_workspace"] = "Script Writer"
+                        update_project_context(topic=ctx.get("topic") or ctx.get("idea") or ctx.get("project_idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
+                        st.rerun()
+                with c4:
+                    if st.button("Copy", key="chat_copy_reply", use_container_width=True):
+                        render_copy_button(reply)
     st.markdown('</div>', unsafe_allow_html=True)
 
 
@@ -3834,12 +4429,15 @@ def render_idea_cards(ideas: list[Idea], niche: str, *, platform: str) -> None:
     plan_label = html_escape(t("card.plan"))
     tags_label = "Tags" if lang == "en" else "الهاشتاغات" if lang == "ar" else "Tags"
     keywords_label = "Keywords" if lang == "en" else "الكلمات المفتاحية" if lang == "ar" else "Mots-clés"
+    project_ctx = st.session_state.get("project_context", {})
 
     offset = 0
     for row in chunked(ideas):
         cols = st.columns(len(row))
         for column, idea in zip(cols, row):
             with column:
+                selected = bool(project_ctx.get("selected_title") and idea.title == project_ctx.get("selected_title")) or bool(project_ctx.get("idea") and idea.title == project_ctx.get("idea"))
+                selected_badge = _selected_meta_html(selected, label="Selected")
                 steps = "".join(f"<li>{html_escape(step)}</li>" for step in idea.steps)
                 plan_html = f'<div class="row"><span class="badge">{plan_label}</span><ol>{steps}</ol></div>' if steps else ""
 
@@ -3855,9 +4453,12 @@ def render_idea_cards(ideas: list[Idea], niche: str, *, platform: str) -> None:
 
                 render_html(
                     f"""
-                    <div class="premium-card">
-                        <div class="badge">#{offset + 1} {html_escape(niche)}</div>
-                        <h3>{html_escape(idea.title)}</h3>
+                    <div class="premium-card" style="padding: 1rem 1rem 0.9rem; border-color: {'rgba(52,211,153,0.38)' if selected else 'rgba(148,163,184,0.12)'}; background: {'rgba(16,185,129,0.08)' if selected else 'rgba(15,23,42,0.72)'};">
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem; margin-bottom:0.8rem; flex-wrap:wrap;">
+                            <span class="badge">#{offset + 1} {html_escape(niche or platform)}</span>
+                            {selected_badge}
+                        </div>
+                        <h3 style="margin: 0.1rem 0 0.7rem;">{html_escape(idea.title)}</h3>
                         <div class="row">
                             <span class="badge">{core_label}</span>
                             <div class="meta">{html_escape(idea.hook)}</div>
@@ -3870,9 +4471,29 @@ def render_idea_cards(ideas: list[Idea], niche: str, *, platform: str) -> None:
                         {tags_html}
                         {keywords_html}
                     </div>
-                    """
+                    """,
+                    unsafe_allow_html=True,
                 )
-                render_copy_button(idea_to_clipboard(idea))
+                action_cols = st.columns(4)
+                with action_cols[0]:
+                    if st.button("Select", key=f"idea_select_{_artifact_key(idea.title)}", use_container_width=True, type="primary" if selected else "secondary"):
+                        st.session_state["selected_idea_title"] = idea.title
+                        update_project_context(topic=niche or idea.title, idea=idea.title, project_idea=idea.title, titles=[item.title for item in ideas], selected_title=idea.title, content_type="idea", platform=platform)
+                with action_cols[1]:
+                    if st.button("Save", key=f"idea_save_{_artifact_key(idea.title)}", use_container_width=True):
+                        update_project_context(topic=niche or idea.title, idea=idea.title, project_idea=idea.title, titles=[item.title for item in ideas], selected_title=idea.title, content_type="idea", platform=platform)
+                        st.success("Idea saved to project context.")
+                with action_cols[2]:
+                    render_copy_button(idea_to_clipboard(idea))
+                with action_cols[3]:
+                    if st.button("Evaluate", key=f"idea_eval_{_artifact_key(idea.title)}", use_container_width=True):
+                        st.session_state["idea_eval_input"] = idea.title
+                        st.session_state["idea_eval_niche"] = niche or project_ctx.get("topic") or idea.title
+                        st.session_state["idea_eval_title"] = idea.title
+                        st.session_state["content_studio_focus"] = "idea_evaluation"
+                        st.session_state["active_workspace"] = "Idea Evaluator"
+                        update_project_context(topic=niche or idea.title, idea=idea.title, project_idea=idea.title, titles=[item.title for item in ideas], selected_title=idea.title, content_type="idea", platform=platform)
+                        st.rerun()
             offset += 1
 
 
@@ -4025,13 +4646,13 @@ def render_footer() -> None:
         <div class="ts-footer">
             <div class="ts-footer-content">
                 <div class="ts-footer-brand">
-                    <h3>⚡ TubeSpark</h3>
-                    <p>مُولّد أفكار يوتيوب الذكي</p>
+                    <h3>⚡ {html_escape(t('footer.brand'))}</h3>
+                    <p>{html_escape(t('footer.tagline'))}</p>
                 </div>
                 <div class="ts-footer-links">
-                    <a href="#" target="_blank">الشروط والأحكام</a>
-                    <a href="#" target="_blank">سياسة الخصوصية</a>
-                    <a href="#" target="_blank">الدعم الفني</a>
+                    <a href="#" target="_blank">{html_escape(t('footer.terms'))}</a>
+                    <a href="#" target="_blank">{html_escape(t('footer.privacy'))}</a>
+                    <a href="#" target="_blank">{html_escape(t('footer.support'))}</a>
                 </div>
             </div>
             <div class="ts-footer-bottom">
@@ -4069,6 +4690,14 @@ def render_generator_tab() -> None:
             with st.spinner("جارٍ توليد الأفكار..."):
                 st.session_state["ideas"] = generate_ideas(clean, FREE_IDEAS_COUNT, lang=current_lang())
                 st.session_state["ideas_niche"] = clean
+                update_project_context(
+                    topic=clean,
+                    idea=st.session_state["ideas"][0].title if st.session_state["ideas"] else clean,
+                    project_idea=st.session_state["ideas"][0].title if st.session_state["ideas"] else clean,
+                    titles=[idea.title for idea in st.session_state["ideas"]],
+                    selected_title=(st.session_state["ideas"][0].title if st.session_state["ideas"] else ""),
+                    content_type="idea",
+                )
 
     if st.session_state.get("ideas"):
         render_idea_cards(st.session_state["ideas"], st.session_state.get("ideas_niche", ""), platform=DEFAULT_PLATFORM)
@@ -4100,6 +4729,17 @@ def render_script_tab() -> None:
                     lang=current_lang(),
                     duration="3-5min",
                 )
+                result = st.session_state["script_result"]
+                update_project_context(
+                    topic=niche.strip(),
+                    idea=idea.strip(),
+                    project_idea=idea.strip(),
+                    script=result.description,
+                    description=result.description,
+                    keywords=list(result.keywords),
+                    hashtags=list(result.hashtags),
+                    content_type="script",
+                )
 
     result = st.session_state.get("script_result")
     if result:
@@ -4128,6 +4768,16 @@ def render_seo_tab() -> None:
         else:
             with st.spinner("جارٍ تحسين SEO..."):
                 st.session_state["seo_result"] = _seo_from_groq(topic.strip(), niche.strip(), lang=current_lang())
+                data = st.session_state["seo_result"]
+                update_project_context(
+                    topic=topic.strip(),
+                    idea=topic.strip(),
+                    project_idea=topic.strip(),
+                    seo=data.seo_description,
+                    keywords=list(data.seo_tags),
+                    search_tags=list(data.seo_tags),
+                    content_type="seo",
+                )
 
     data = st.session_state.get("seo_result")
     if data:
@@ -4156,70 +4806,887 @@ def render_thumbnail_prompt_tab() -> None:
             "Use a high-contrast composition, large readable title, clean rich colors, dramatic lighting, and a strong curiosity hook."
         )
         st.session_state["thumbnail_prompt"] = prompt
+        update_project_context(
+            topic=topic.strip() if topic.strip() else st.session_state.get("project_context", {}).get("topic", ""),
+            platform=st.session_state.get("project_context", {}).get("platform", DEFAULT_PLATFORM),
+            content_type="visual",
+            visual_direction=prompt,
+        )
 
     if st.session_state.get("thumbnail_prompt"):
         st.code(st.session_state["thumbnail_prompt"], language="text")
 
 
-def render_workspace_layout() -> None:
-    """Single-file robust navigation: a landing page with in-app tool switching."""
-    st.markdown('<div class="ts-shell">', unsafe_allow_html=True)
-    hero_col, tool_col = st.columns([1.18, 1.02], gap="large")
+def render_features_grid() -> None:
+    """Marketing feature blocks for the SaaS narrative."""
+    render_html(
+        f"""
+        <section id="features" style="margin: 2.5rem 0;">
+            <div style="margin-bottom: 1.3rem;">
+                <div style="font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: #C4B5FD; font-weight: 800;">{html_escape(t('landing.features.kicker'))}</div>
+                <h2 style="margin: 0.5rem 0 0; font-size: clamp(1.7rem, 2.5vw, 2.5rem); color: #F8FAFC; font-weight: 800;">{html_escape(t('landing.features.title'))}</h2>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+                <div class="premium-card" style="padding: 1.25rem; min-height: 180px;">
+                    <div class="badge">01</div>
+                    <h3>Multi-platform engine</h3>
+                    <div class="meta">Plan ideas, scripts, hooks, and SEO across YouTube and adjacent creator channels.</div>
+                </div>
+                <div class="premium-card" style="padding: 1.25rem; min-height: 180px;">
+                    <div class="badge">02</div>
+                    <h3>AI workflow hub</h3>
+                    <div class="meta">One idea can flow into titles, scripts, descriptions, and optimization in sequence.</div>
+                </div>
+                <div class="premium-card" style="padding: 1.25rem; min-height: 180px;">
+                    <div class="badge">03</div>
+                    <h3>Workspace-first UX</h3>
+                    <div class="meta">Use focused workspaces for ideas, scripts, SEO, and content generation without losing context.</div>
+                </div>
+                <div class="premium-card" style="padding: 1.25rem; min-height: 180px;">
+                    <div class="badge">04</div>
+                    <h3>Creator-ready delivery</h3>
+                    <div class="meta">Prepare concepts, prompts, and content pack outputs for weekly publishing and faster turnaround.</div>
+                </div>
+            </div>
+        </section>
+        """
+    )
 
+
+def render_pricing_section() -> None:
+    """Marketing pricing with real package labels already agreed to by the product scope."""
+    render_html(
+        f"""
+        <section id="pricing" style="margin: 2.5rem 0;">
+            <div style="margin-bottom: 1.3rem; text-align: center;">
+                <div style="font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: #C4B5FD; font-weight: 800;">{html_escape(t('landing.pricing.kicker'))}</div>
+                <h2 style="margin: 0.5rem 0 0; font-size: clamp(1.7rem, 2.5vw, 2.5rem); color: #F8FAFC; font-weight: 800;">{html_escape(t('landing.pricing.title'))}</h2>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+                <div class="premium-card" style="padding: 1.4rem; min-height: 220px;">
+                    <div class="badge">Free</div>
+                    <h3 style="margin-top: 1rem;">Starter</h3>
+                    <div class="meta" style="font-size: 2rem; font-weight: 900; color: #F8FAFC; margin: 0.6rem 0 0.8rem;">$0</div>
+                    <div class="meta">Basic idea generation and lightweight exploration.</div>
+                </div>
+                <div class="premium-card" style="padding: 1.4rem; min-height: 220px; background: rgba(124, 58, 237, 0.08); border-color: rgba(196, 181, 253, 0.25);">
+                    <div class="badge" style="background: rgba(124, 58, 237, 0.18); color: #E9D5FF;">Popular</div>
+                    <h3 style="margin-top: 1rem;">Pro</h3>
+                    <div class="meta" style="font-size: 2rem; font-weight: 900; color: #F8FAFC; margin: 0.6rem 0 0.8rem;">$4.97</div>
+                    <div class="meta">Core AI workflows with practical output for daily publishing.</div>
+                </div>
+                <div class="premium-card" style="padding: 1.4rem; min-height: 220px;">
+                    <div class="badge">Scale</div>
+                    <h3 style="margin-top: 1rem;">Growth</h3>
+                    <div class="meta" style="font-size: 2rem; font-weight: 900; color: #F8FAFC; margin: 0.6rem 0 0.8rem;">$9.97</div>
+                    <div class="meta">Expanded workflow depth for serious content operations.</div>
+                </div>
+                <div class="premium-card" style="padding: 1.4rem; min-height: 220px;">
+                    <div class="badge">Custom</div>
+                    <h3 style="margin-top: 1rem;">Agency</h3>
+                    <div class="meta" style="font-size: 1.6rem; font-weight: 900; color: #F8FAFC; margin: 0.6rem 0 0.8rem;">Custom</div>
+                    <div class="meta">Final multi-seat pricing and feature scope will be defined in the commercial plan.</div>
+                </div>
+            </div>
+        </section>
+        """
+    )
+
+
+def render_faq_section() -> None:
+    """FAQ foundation for the marketing site without inventing unsupported product claims."""
+    render_html(
+        f"""
+        <section id="faq" style="margin: 2.5rem 0;">
+            <div style="margin-bottom: 1.3rem;">
+                <div style="font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: #C4B5FD; font-weight: 800;">{html_escape(t('landing.faq.kicker'))}</div>
+                <h2 style="margin: 0.5rem 0 0; font-size: clamp(1.7rem, 2.5vw, 2.5rem); color: #F8FAFC; font-weight: 800;">{html_escape(t('landing.faq.title'))}</h2>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem;">
+                <div class="premium-card" style="padding: 1.2rem;">
+                    <h3>Is TubeSpark only for YouTube?</h3>
+                    <div class="meta">The product architecture is being expanded beyond YouTube toward multi-platform content creation workflows.</div>
+                </div>
+                <div class="premium-card" style="padding: 1.2rem;">
+                    <h3>Can I use tools separately?</h3>
+                    <div class="meta">Yes. Each core workspace remains usable independently while the AI chat can connect the full workflow.</div>
+                </div>
+                <div class="premium-card" style="padding: 1.2rem;">
+                    <h3>Does the AI chat replace the tools?</h3>
+                    <div class="meta">No. The chat acts as a workflow hub, while each tool keeps its own focused workspace and context.</div>
+                </div>
+                <div class="premium-card" style="padding: 1.2rem;">
+                    <h3>Is this still a prototype foundation?</h3>
+                    <div class="meta">Yes. This phase focuses on architecture and product presentation without replacing the existing generation logic.</div>
+                </div>
+            </div>
+        </section>
+        """
+    )
+
+
+def render_cta_banner() -> None:
+    """Final CTA section for marketing conversion surface."""
+    render_html(
+        f"""
+        <section id="cta" style="margin: 2.5rem 0 1rem;">
+            <div class="premium-card" style="padding: 1.8rem; text-align: center; background: rgba(124, 58, 237, 0.08); border-color: rgba(196, 181, 253, 0.24);">
+                <div style="font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: #C4B5FD; font-weight: 800; margin-bottom: 0.8rem;">{html_escape(t('landing.cta.kicker'))}</div>
+                <h2 style="margin: 0; color: #F8FAFC; font-size: clamp(1.8rem, 2.8vw, 2.8rem); font-weight: 900;">{html_escape(t('landing.cta.title'))}</h2>
+                <p style="margin: 0.9rem auto 1.4rem; max-width: 600px; color: #E2E8F0; line-height: 1.7;">TubeSpark is structured as a premium content engine for creators, operators, and teams building consistent publishing systems.</p>
+                <a href="#workspace" class="ts-primary-btn">{html_escape(t('nav.start'))}</a>
+            </div>
+        </section>
+        """
+    )
+
+
+APP_WORKSPACES = [
+    "AI Chat",
+    "Idea Generator",
+    "Idea Evaluator",
+    "Script Writer",
+    "SEO Optimizer",
+    "Visual Prompt Studio",
+]
+PROJECT_PLATFORM_OPTIONS = [
+    "YouTube",
+    "YouTube Shorts",
+    "TikTok",
+    "Instagram Reels",
+    "LinkedIn",
+    "Podcast",
+    "Blog",
+]
+
+
+def ensure_project_context() -> dict[str, Any]:
+    """Shared project context across the four workspaces; no database or auth layer involved."""
+    defaults = {
+        "topic": "",
+        "platform": DEFAULT_PLATFORM,
+        "content_type": "video",
+        "idea": "",
+        "titles": [],
+        "selected_title": "",
+        "evaluation": "",
+        "script": "",
+        "description": "",
+        "seo": "",
+        "keywords": [],
+        "hashtags": [],
+        "search_tags": [],
+        "visual_direction": "",
+        # compatibility aliases already used elsewhere in the app
+        "project_idea": "",
+        "selected_platform": DEFAULT_PLATFORM,
+        "visual_concepts": [],
+    }
+    ctx = st.session_state.setdefault("project_context", defaults.copy())
+    for key, value in defaults.items():
+        ctx.setdefault(key, value)
+
+    if not ctx.get("topic") and ctx.get("idea"):
+        ctx["topic"] = ctx["idea"]
+    if not ctx.get("idea") and ctx.get("project_idea"):
+        ctx["idea"] = ctx["project_idea"]
+    if not ctx.get("project_idea") and ctx.get("idea"):
+        ctx["project_idea"] = ctx["idea"]
+    if not ctx.get("platform") and ctx.get("selected_platform"):
+        ctx["platform"] = ctx["selected_platform"]
+    if not ctx.get("selected_platform"):
+        ctx["selected_platform"] = ctx.get("platform") or DEFAULT_PLATFORM
+    if not ctx.get("platform"):
+        ctx["platform"] = ctx.get("selected_platform") or DEFAULT_PLATFORM
+    if not ctx.get("content_type"):
+        ctx["content_type"] = "video"
+
+    return ctx
+
+
+def update_project_context(**kwargs: Any) -> None:
+    ctx = ensure_project_context()
+    for key, value in kwargs.items():
+        if value is None:
+            continue
+        ctx[key] = value
+
+        if key == "topic":
+            ctx["project_idea"] = value
+            ctx["idea"] = value
+        if key == "idea":
+            ctx["project_idea"] = value
+            ctx["topic"] = value
+        if key == "project_idea":
+            ctx["idea"] = value
+            ctx["topic"] = value
+        if key == "platform":
+            ctx["selected_platform"] = value
+        if key == "selected_platform":
+            ctx["platform"] = value
+        if key == "selected_title":
+            ctx["selected_title"] = value
+
+
+def normalize_duration_value(duration: str | None) -> str:
+    """Normalize user-facing duration labels into the canonical backend values."""
+    value = (duration or "8-10min").strip().lower().replace(" ", "")
+    mapping = {
+        "short-form": "shorts",
+        "shorts": "shorts",
+        "3-5min": "3-5min",
+        "3-5": "3-5min",
+        "8-10min": "8-10min",
+        "8-10": "8-10min",
+        "15-20min": "15min+",
+        "15+min": "15min+",
+        "15min+": "15min+",
+        "15-20": "15min+",
+        "15+": "15min+",
+    }
+    return mapping.get(value, "8-10min")
+
+
+def render_workspace_header(title: str, description: str) -> None:
+    """Reusable header for the app workspaces without decorative card wrappers."""
+    st.markdown(
+        f"""
+        <div style="margin: 0 0 1rem 0;">
+            <div style="font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: #C4B5FD; font-weight: 800; margin-bottom: 0.4rem;">{html_escape(t('workspace.label'))}</div>
+            <h3 style="margin: 0 0 0.35rem 0; font-size: clamp(1.8rem, 3vw, 2.3rem); color: #F8FAFC; font-weight: 800; line-height: 1.2;">{html_escape(title)}</h3>
+            <p style="margin: 0; color: #CBD5E1; line-height: 1.6;">{html_escape(description)}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_project_context_card() -> None:
+    """Project context summary intentionally kept out of the main workspace flow to avoid the repeated decorative top cards."""
+    return None
+
+
+def render_platform_picker(*, key: str = "project_platform_picker", default: str | None = None) -> str:
+    """Project-level platform selector to keep the app multi-platform without implying unsupported integrations."""
+    ctx = ensure_project_context()
+    selected = st.selectbox(
+        "Platform",
+        PROJECT_PLATFORM_OPTIONS,
+        index=PROJECT_PLATFORM_OPTIONS.index((default or ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)) if (default or ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM) in PROJECT_PLATFORM_OPTIONS else 0,
+        key=key,
+    )
+    update_project_context(platform=selected, selected_platform=selected)
+    return selected
+
+
+def render_landing_page() -> None:
+    """Marketing landing page only; app navigation lives in the app shell."""
+    st.markdown('<div id="home" class="ts-shell">', unsafe_allow_html=True)
+    landing_action_col, _ = st.columns([1, 1])
+    with landing_action_col:
+        if st.button(t("nav.open_app"), key="landing_open_app"):
+            st.session_state["app_mode"] = "app"
+            st.session_state["active_workspace"] = "AI Chat"
+            st.rerun()
+
+    hero_col, tool_col = st.columns([1.18, 1.02], gap="large")
     with hero_col:
         render_hero()
 
     with tool_col:
         st.markdown(
-            """
-            <div class="ts-tool-surface" id="workspace">
-                <div class="ts-card" style="margin: 1rem; background: rgba(15,23,42,0.68); border: 1px solid rgba(148,163,184,0.16);">
-                    <div class="ts-card-kicker">Workspace</div>
-                    <h3>Choose a tool</h3>
-                    <p>Jump between the generator, script writer, SEO optimizer, and thumbnail prompt builder.</p>
+            f"""
+            <div class="ts-tool-surface ts-workspace-preview" id="workspace">
+                <div class="ts-workspace-kicker">{html_escape(t('landing.workspace.kicker'))}</div>
+                <h3 class="ts-workspace-title">{html_escape(t('landing.workspace.title'))}</h3>
+                <p class="ts-workspace-copy">{html_escape(t('landing.workspace.copy'))}</p>
+                <div class="ts-preview-chip-row">
+                    <span class="ts-preview-chip">Ideas</span>
+                    <span class="ts-preview-chip">Script</span>
+                    <span class="ts-preview-chip">SEO</span>
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        tool_choice = st.radio(
-            "Navigation",
-            ["Home", "Ideas", "Script", "SEO", "Thumbnail"],
-            horizontal=True,
-            index=0,
-            label_visibility="collapsed",
-            key="tool_nav",
-        )
 
-        if tool_choice == "Ideas":
-            render_generator_tab()
-        elif tool_choice == "Script":
-            render_script_tab()
-        elif tool_choice == "SEO":
-            render_seo_tab()
-        elif tool_choice == "Thumbnail":
-            render_thumbnail_prompt_tab()
-        else:
-            st.caption("Use the controls above to jump into the live generation tools.")
-
+    render_landing_tool_cards()
+    render_features_grid()
+    render_how_it_works()
+    render_pricing_section()
+    render_faq_section()
+    render_cta_banner()
+    render_footer()
     st.markdown('</div>', unsafe_allow_html=True)
 
-    if tool_choice == "Home":
-        st.markdown(
-            """
-            <div class="ts-shell">
-                <div class="ts-card">
-                    <div class="ts-card-kicker">Why creators use TubeSpark</div>
-                    <h3>From niche research to title optimization and AI writing.</h3>
+
+def render_app_navigation() -> None:
+    """Custom sidebar navigation for the product workspaces without using the four primary workspaces as tabs."""
+    st.session_state.setdefault("active_workspace", "AI Chat")
+    workspace_labels = {
+        "AI Chat": t("workspace.ai_chat"),
+        "Idea Generator": t("workspace.idea_generator"),
+        "Idea Evaluator": t("workspace.idea_evaluator"),
+        "Script Writer": t("workspace.script_writer"),
+        "SEO Optimizer": t("workspace.seo_optimizer"),
+        "Visual Prompt Studio": t("workspace.visual_prompt_studio"),
+    }
+    st.markdown("### TubeSpark")
+    st.markdown("---")
+    for workspace in APP_WORKSPACES:
+        if st.button(
+            workspace_labels.get(workspace, workspace),
+            key=f"app_nav_{workspace}",
+            use_container_width=True,
+            type="primary" if st.session_state.get("active_workspace") == workspace else "secondary",
+        ):
+            st.session_state["active_workspace"] = workspace
+            st.rerun()
+    st.markdown("---")
+    if st.button(t("nav.back_to_landing"), key="app_back_to_landing", use_container_width=True):
+        st.session_state["app_mode"] = "landing"
+        st.rerun()
+
+
+def render_ai_chat_workspace() -> None:
+    """AI Chat workspace with project context summary and direct project prompt flow."""
+    render_workspace_header(t("workspace.ai_chat"), t("workspace.ai_chat_desc"))
+    render_ai_chat_panel()
+
+
+def render_idea_generator_workspace() -> None:
+    """Professional idea generation workspace using the existing idea engine without changing backend logic."""
+    render_content_studio_workspace()
+
+
+def render_idea_evaluator_workspace() -> None:
+    """Standalone idea evaluation page backed by the existing evaluation engine and result structures."""
+    render_workspace_header("Idea Evaluator", "Evaluate any idea manually using the existing evaluation workflow.")
+    project_platform = render_platform_picker(key="idea_evaluator_platform")
+
+    st.markdown("### Idea Evaluation")
+    st.caption("Evaluate an idea before it becomes a title, script, or SEO strategy.")
+    idea_input = st.text_area("Idea", value=st.session_state.get("project_context", {}).get("idea") or st.session_state.get("project_context", {}).get("project_idea") or "", key="idea_eval_input", height=140)
+    eval_platform = st.selectbox("Target platform", PROJECT_PLATFORM_OPTIONS, index=PROJECT_PLATFORM_OPTIONS.index(project_platform) if project_platform in PROJECT_PLATFORM_OPTIONS else 0, key="idea_eval_platform")
+    eval_audience = st.text_input("Audience", value=st.session_state.get("project_context", {}).get("audience") or "", key="idea_eval_audience")
+    eval_niche = st.text_input("Niche", value=st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "", key="idea_eval_niche")
+    eval_content_type = st.selectbox("Content type", ["Video", "Short", "Podcast", "Guide", "Series"], index=0, key="idea_eval_content_type")
+    eval_title = st.text_input("Optional title", value=st.session_state.get("project_context", {}).get("selected_title") or "", key="idea_eval_title")
+
+    if st.button("Evaluate Idea", key="idea_eval_button", type="primary"):
+        if idea_input.strip():
+            with st.spinner("Evaluating idea..."):
+                result = evaluate_idea(idea_input.strip(), lang=current_lang())
+                st.session_state["idea_eval_result"] = result
+                update_project_context(
+                    idea=idea_input.strip(),
+                    topic=eval_niche.strip() or idea_input.strip(),
+                    platform=eval_platform,
+                    selected_title=eval_title.strip() or result.idea.title,
+                    evaluation=result.analysis,
+                    content_type=eval_content_type.lower(),
+                )
+                st.success("Idea evaluated and saved to the project context.")
+        else:
+            st.warning("Please provide an idea to evaluate.")
+
+    if st.session_state.get("idea_eval_result"):
+        result = st.session_state["idea_eval_result"]
+        render_evaluation(result, idea_input)
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            if st.button("Use Improved Idea", key="idea_eval_use_idea", use_container_width=True):
+                improved = result.idea.title or idea_input.strip()
+                update_project_context(topic=improved, idea=improved, project_idea=improved, selected_title=improved, titles=[improved], content_type="idea", platform=eval_platform)
+                st.session_state["workspace_script_idea"] = improved
+                st.session_state["workspace_script_niche"] = eval_niche.strip() or improved
+                st.success("Improved idea saved to project context.")
+        with c2:
+            if st.button("Send to Script Writer", key="idea_eval_continue_script", use_container_width=True):
+                st.session_state["active_workspace"] = "Script Writer"
+                st.rerun()
+        with c3:
+            if st.button("Save", key="idea_eval_save", use_container_width=True):
+                update_project_context(evaluation=result.analysis, content_type="evaluation")
+                st.success("Evaluation saved.")
+        with c4:
+            render_copy_button(result.idea.title or idea_input)
+
+
+def render_script_writer_workspace() -> None:
+    """Standalone script writer that can be used without any prior idea generation or project state."""
+    render_workspace_header("Script Writer", "Create a polished script from a topic, title, audience, platform, and runtime context.")
+    project_platform = render_platform_picker(key="script_writer_platform")
+
+    title_input = st.text_input("Working title", value=st.session_state.get("project_context", {}).get("selected_title") or st.session_state.get("project_context", {}).get("idea") or "", key="script_writer_title")
+    topic_input = st.text_input("Topic / idea", value=st.session_state.get("workspace_script_idea") or st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "", key="workspace_script_topic")
+    audience = st.text_input("Audience", value=st.session_state.get("project_context", {}).get("audience") or "general viewers", key="script_writer_audience")
+    content_type = st.selectbox("Content type", ["Video", "Short", "Podcast", "Guide", "Series"], index=0, key="script_writer_content_type")
+    duration_choice = st.selectbox("Video duration", ["Shorts", "3-5 min", "8-10 min", "15+ min"], index=1, key="script_writer_duration")
+    speaking_style = st.selectbox("Speaking style", ["professional", "casual", "educational", "story-driven", "energetic"], index=0, key="script_writer_vibe")
+    script_lang = st.selectbox("Language", list(SUPPORTED_LANGUAGES), index=list(SUPPORTED_LANGUAGES).index(current_lang()), key="script_writer_language")
+    key_points = st.text_area("Key points", value="", key="script_writer_key_points", height=100)
+    additional_context = st.text_area("Additional context", value="", key="script_writer_context", height=90)
+
+    if st.button("Generate Script", type="primary", key="content_script_generate"):
+        if topic_input.strip() and (title_input.strip() or st.session_state.get("project_context", {}).get("idea") or "").strip():
+            idea_seed = title_input.strip() or st.session_state.get("project_context", {}).get("idea") or topic_input.strip()
+            context_parts = [idea_seed]
+            if key_points.strip():
+                context_parts.append(f"Key points: {key_points.strip()}")
+            if additional_context.strip():
+                context_parts.append(f"Additional context: {additional_context.strip()}")
+            if content_type:
+                context_parts.append(f"Content type: {content_type}")
+            idea_text = " ".join(part for part in context_parts if part and str(part).strip())
+            with st.spinner("Generating script..."):
+                result = _script_from_groq(
+                    topic_input.strip(),
+                    idea_text,
+                    platform=project_platform,
+                    vibe=speaking_style,
+                    audience=audience.strip() or "general viewers",
+                    lang=script_lang,
+                    duration=normalize_duration_value(duration_choice),
+                )
+                st.session_state["script_result"] = result
+                update_project_context(
+                    topic=topic_input.strip(),
+                    idea=idea_text,
+                    selected_title=title_input.strip() or idea_text,
+                    script=result.description,
+                    description=result.description,
+                    hashtags=list(result.hashtags),
+                    keywords=list(result.keywords),
+                    content_type=content_type.lower(),
+                    platform=project_platform,
+                )
+                st.success("Script generated and saved.")
+        else:
+            st.warning("Please provide both a topic and a working idea or title.")
+    result = st.session_state.get("script_result")
+    if result:
+        st.markdown(f"### {html_escape(result.title)}", unsafe_allow_html=True)
+        if result.sections:
+            for idx, section in enumerate(result.sections):
+                section_name = section.get("name") or f"Section {idx + 1}"
+                section_time = section.get("time") or ""
+                section_content = section.get("content") or ""
+                notes = section.get("notes") or ""
+                st.markdown(
+                    f"""
+                    <div class="premium-card" style="padding: 1rem; margin-bottom: 0.75rem;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap; margin-bottom: 0.5rem;">
+                            <span class="badge">{html_escape(section_name)}</span>
+                            {f'<span class="badge">{html_escape(section_time)}</span>' if section_time else ''}
+                        </div>
+                        <div class="meta" style="white-space: pre-wrap;">{html_escape(section_content)}</div>
+                        {f'<div class="meta" style="margin-top: 0.7rem; color: #C4B5FD;">{html_escape(notes)}</div>' if notes else ''}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.write(result.description)
+        if result.keywords:
+            st.markdown("#### Keywords")
+            st.markdown(_render_chip_row(tuple(result.keywords), limit=8), unsafe_allow_html=True)
+        if result.hashtags:
+            st.markdown("#### Hashtags")
+            st.markdown(_render_chip_row(tuple(result.hashtags), limit=12), unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            render_copy_button(result.description)
+        with c2:
+            if st.button("Save", key="content_script_save", use_container_width=True):
+                update_project_context(script=result.description, description=result.description, hashtags=list(result.hashtags), keywords=list(result.keywords), content_type="script")
+                st.success("Script is now part of the shared project context.")
+
+
+def render_content_studio_workspace() -> None:
+    """Focused Idea Generator page built from the existing generation workflow without mixing in unrelated tool tabs."""
+    render_workspace_header("Idea Generator", "Generate strong content ideas and title options for the active project.")
+    project_platform = render_platform_picker(key="content_studio_platform")
+
+    tabs = st.tabs(["Ideas", "Titles"])
+
+    with tabs[0]:
+        niche = st.text_input("Channel / content niche", value=st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "", key="content_ideas_niche")
+        audience = st.text_input("Target audience", value=st.session_state.get("project_context", {}).get("audience") or "", key="content_ideas_audience")
+        platform = st.selectbox("Platform", PROJECT_PLATFORM_OPTIONS, index=PROJECT_PLATFORM_OPTIONS.index(project_platform) if project_platform in PROJECT_PLATFORM_OPTIONS else 0, key="content_ideas_platform")
+        content_type = st.selectbox("Content type", ["Video", "Short", "Podcast", "Guide", "Series"], index=0, key="content_ideas_type")
+        duration_choice = st.selectbox("Video duration", ["3-5 min", "8-10 min", "15-20 min", "Short-form"], index=1, key="content_ideas_duration")
+        lang = st.selectbox("Language", list(SUPPORTED_LANGUAGES), index=list(SUPPORTED_LANGUAGES).index(current_lang()), key="content_ideas_lang")
+        notes = st.text_area("Additional context", value="", key="content_ideas_context", height=100)
+
+        if st.button("Generate Ideas", type="primary", key="content_ideas_generate"):
+            if niche.strip():
+                prompt_vibe = f"{content_type} for {audience or 'general audiences'}"
+                if notes.strip():
+                    prompt_vibe = f"{prompt_vibe} | {notes.strip()}"
+                with st.spinner("Generating ideas..."):
+                    items = generate_ideas(
+                        niche.strip(),
+                        FREE_IDEAS_COUNT,
+                        platform=platform,
+                        vibe=prompt_vibe,
+                        audience=audience,
+                        lang=lang,
+                        duration=normalize_duration_value(duration_choice),
+                    )
+                    st.session_state["ideas"] = items
+                    st.session_state["ideas_niche"] = niche.strip()
+                    update_project_context(
+                        topic=niche.strip(),
+                        idea=items[0].title if items else niche.strip(),
+                        titles=[idea.title for idea in items],
+                        selected_title=items[0].title if items else "",
+                        content_type="idea",
+                        platform=platform,
+                    )
+                    st.success("Ideas generated and saved to the project context.")
+            else:
+                st.warning("Please enter a niche or topic first.")
+
+        if st.session_state.get("ideas"):
+            render_idea_cards(st.session_state["ideas"], st.session_state.get("ideas_niche", ""), platform=platform)
+            if st.button("Save ideas to project", key="content_ideas_save"):
+                update_project_context(topic=(st.session_state.get("ideas_niche") or niche), titles=[idea.title for idea in st.session_state["ideas"]], selected_title=st.session_state["ideas"][0].title, content_type="idea", platform=platform)
+                st.success("Saved to project context.")
+
+    with tabs[1]:
+        base_idea = st.text_input("Base idea", value=st.session_state.get("project_context", {}).get("idea") or st.session_state.get("project_context", {}).get("project_idea") or "", key="content_title_base")
+        manual_titles = st.text_area("Title variants", value="\n".join(st.session_state.get("project_context", {}).get("titles", [])), height=150, key="content_title_variants")
+        col_a, col_b = st.columns(2)
+        with col_a:
+            if st.button("Generate Title Ideas", key="content_titles_generate"):
+                if base_idea.strip():
+                    with st.spinner("Creating title variants..."):
+                        generated = generate_ideas(base_idea.strip(), 3, platform=project_platform, lang=current_lang())
+                        titles = [idea.title for idea in generated]
+                        update_project_context(topic=base_idea.strip(), idea=base_idea.strip(), titles=titles, selected_title=titles[0] if titles else "", content_type="title", platform=project_platform)
+                        st.success("Title ideas generated.")
+        with col_b:
+            if st.button("Save titles to project", key="save_content_titles"):
+                saved = [line.strip() for line in manual_titles.splitlines() if line.strip()]
+                update_project_context(titles=saved, selected_title=saved[0] if saved else "", content_type="title")
+                st.success("Titles saved to project context.")
+        if st.session_state.get("project_context", {}).get("titles"):
+            selected_title = st.session_state.get("project_context", {}).get("selected_title")
+            for idx, title in enumerate(st.session_state["project_context"]["titles"]):
+                is_selected = title == selected_title
+                st.markdown(
+                    f"""
+                    <div class="premium-card" style="padding: 1rem; border-color: {'rgba(52,211,153,0.38)' if is_selected else 'rgba(148,163,184,0.12)'}; background: {'rgba(16,185,129,0.08)' if is_selected else 'rgba(15,23,42,0.72)'}; margin-bottom: .8rem;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:.5rem; margin-bottom: .5rem; flex-wrap: wrap;">
+                            <span class="badge">#{idx + 1}</span>
+                            {_selected_meta_html(is_selected, label='Selected')}
+                        </div>
+                        <h4 style="margin: 0; color: #F8FAFC;">{html_escape(title)}</h4>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                c1, c2, c3, c4 = st.columns(4)
+                with c1:
+                    if st.button("Use", key=f"title_use_{_artifact_key(title)}", use_container_width=True, type="primary" if is_selected else "secondary"):
+                        update_project_context(selected_title=title, titles=st.session_state["project_context"].get("titles", []), content_type="title")
+                        st.success("Title selected.")
+                with c2:
+                    if st.button("Save", key=f"title_save_{_artifact_key(title)}", use_container_width=True):
+                        update_project_context(titles=st.session_state["project_context"].get("titles", []), selected_title=title, content_type="title")
+                        st.success("Title saved.")
+                with c3:
+                    render_copy_button(title)
+                with c4:
+                    if st.button("Evaluate", key=f"title_eval_{_artifact_key(title)}", use_container_width=True):
+                        st.session_state["idea_eval_input"] = title
+                        st.session_state["idea_eval_title"] = title
+                        st.session_state["active_workspace"] = "Idea Evaluator"
+                        update_project_context(selected_title=title, titles=st.session_state["project_context"].get("titles", []), content_type="title")
+                        st.rerun()
+                st.markdown("<div style='margin-bottom: 0.5rem;'></div>", unsafe_allow_html=True)
+
+
+def render_seo_workspace() -> None:
+    """SEO & Discovery workspace: direct-use sections built from the existing SEO functions without inventing unsupported metrics."""
+    render_workspace_header("SEO Optimizer", "One professional SEO page for discovery, title optimization, keywords, tags, and related outputs.")
+    project_platform = render_platform_picker(key="seo_workspace_platform")
+
+    tabs = st.tabs(["SEO Overview", "Keyword Research", "SEO Optimizer", "Search Tags", "Discovery"])
+
+    with tabs[0]:
+        st.markdown("### SEO Overview")
+        st.caption("High-level optimization output for the active topic.")
+        topic = st.text_input("Video topic", value=st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "", key="workspace_seo_topic")
+        niche = st.text_input("Niche / category", value=st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "", key="workspace_seo_niche")
+        if st.button("Generate SEO Overview", type="primary", key="seo_workspace_generate"):
+            if topic.strip() and niche.strip():
+                with st.spinner("Generating SEO output..."):
+                    result = _seo_from_groq(topic.strip(), niche.strip(), lang=current_lang())
+                    st.session_state["seo_result"] = result
+                    update_project_context(topic=topic.strip(), idea=topic.strip(), seo=result.seo_description, keywords=list(result.seo_tags), search_tags=list(result.seo_tags), content_type="seo", platform=project_platform)
+                    st.success("SEO data generated and saved to the project context.")
+            else:
+                st.warning("Please provide both the topic and niche.")
+        data = st.session_state.get("seo_result")
+        if data:
+            render_artifact_card("SEO Description", data.seo_description, badge="SEO Description", meta="Discovery-ready")
+            if data.seo_tags:
+                st.markdown("#### Keywords")
+                st.markdown(_render_chip_row(data.seo_tags, limit=12), unsafe_allow_html=True)
+            if data.chapters:
+                st.markdown("#### Chapters")
+                for idx, chapter in enumerate(data.chapters[:6], start=1):
+                    st.markdown(
+                        f"""
+                        <div class="premium-card" style="padding: 0.8rem 0.9rem; margin-bottom: 0.55rem;">
+                            <div class="badge">{idx}</div>
+                            <div class="meta" style="margin-top:0.55rem;">{html_escape(chapter)}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+            if data.thumbnail_texts:
+                st.markdown("#### Thumbnail Texts")
+                st.markdown(_render_chip_row(data.thumbnail_texts, limit=6), unsafe_allow_html=True)
+            c1, c2 = st.columns(2)
+            with c1:
+                render_copy_button(data.seo_description)
+            with c2:
+                if st.button("Save SEO to project", key="seo_workspace_save", use_container_width=True):
+                    update_project_context(seo=data.seo_description, keywords=list(data.seo_tags), search_tags=list(data.seo_tags), content_type="seo")
+                    st.success("SEO saved to project context.")
+
+    with tabs[1]:
+        st.markdown("### Keyword Research")
+        st.caption("Keyword-focused output using the active SEO data and project context.")
+        if st.session_state.get("seo_result"):
+            tags = st.session_state["seo_result"].seo_tags
+            st.markdown(_render_chip_row(tags, limit=12), unsafe_allow_html=True)
+            if st.button("Save keywords to project", key="seo_keywords_save"):
+                update_project_context(keywords=list(tags), search_tags=list(tags), content_type="keyword")
+                st.success("Keywords saved.")
+        else:
+            st.info("No SEO keywords generated yet. Use the SEO Overview tab to create them.")
+
+    with tabs[2]:
+        st.markdown("### SEO Optimizer")
+        st.caption("Optimize title, description, and keyword output using the existing SEO backend.")
+        seo_title = st.text_input("Title", value=st.session_state.get("project_context", {}).get("selected_title") or "", key="seo_optimizer_title")
+        seo_description = st.text_area("Description", value=st.session_state.get("project_context", {}).get("seo") or st.session_state.get("project_context", {}).get("description") or "", key="seo_optimizer_description", height=130)
+        seo_niche = st.text_input("Niche", value=st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "", key="seo_optimizer_niche")
+        seo_keyword = st.text_input("Primary keyword", value=(st.session_state.get("project_context", {}).get("keywords") or [""])[0] if st.session_state.get("project_context", {}).get("keywords") else "", key="seo_optimizer_keyword")
+        seo_audience = st.text_input("Audience", value=st.session_state.get("project_context", {}).get("audience") or "", key="seo_optimizer_audience")
+        if st.button("Optimize SEO", type="primary", key="seo_optimizer_button"):
+            if seo_title.strip() or seo_description.strip() or seo_niche.strip():
+                with st.spinner("Optimizing SEO..."):
+                    result = _seo_from_groq(seo_niche.strip() or seo_title.strip() or "topic", seo_niche.strip() or "content", lang=current_lang())
+                    st.session_state["seo_result"] = result
+                    update_project_context(seo=result.seo_description, keywords=list(result.seo_tags), search_tags=list(result.seo_tags), selected_title=seo_title.strip() or st.session_state.get("project_context", {}).get("selected_title", ""), content_type="seo", platform=project_platform)
+                    st.success("SEO optimization produced and saved.")
+            else:
+                st.warning("Add a title or topic before optimizing SEO.")
+        if st.session_state.get("seo_result"):
+            data = st.session_state["seo_result"]
+            render_artifact_card("Optimized SEO", data.seo_description, badge="SEO", meta="Optimized")
+            if data.seo_tags:
+                st.markdown(_render_chip_row(data.seo_tags, limit=12), unsafe_allow_html=True)
+
+    with tabs[3]:
+        st.markdown("### Search Tags")
+        st.caption("Search tags and keyword reuse for discovery and SEO placement.")
+        if st.session_state.get("seo_result"):
+            tags = st.session_state["seo_result"].seo_tags
+            st.markdown(_render_chip_row(tags, limit=12), unsafe_allow_html=True)
+            if st.button("Save tags to project", key="seo_tags_save"):
+                update_project_context(search_tags=list(tags), keywords=list(tags), content_type="tags")
+                st.success("Tags saved.")
+        else:
+            st.info("Generate SEO output to populate tags.")
+
+    with tabs[4]:
+        st.markdown("### Discovery")
+        st.caption("Discovery-ready inputs prepared for continued keyword expansion while preserving the current working SEO functions.")
+        discovery_topic = st.text_input("Discovery topic", value=st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "", key="seo_discovery_topic")
+        discovery_niche = st.text_input("Discovery niche", value=project_platform, key="seo_discovery_niche")
+        if st.button("Prepare discovery brief", key="seo_discovery_run"):
+            if discovery_topic.strip():
+                update_project_context(topic=discovery_topic.strip(), platform=discovery_niche.strip() or project_platform, content_type="discovery")
+                st.info("Discovery brief prepared in the current project context.")
+            else:
+                st.warning("Enter a discovery topic to prepare the context.")
+
+
+def render_visual_prompt_studio_workspace() -> None:
+    """Visual Prompt Studio: keeping visual concepting and prompt guidance in one product page without claiming unsupported image generation."""
+    render_visual_workspace()
+
+
+def render_visual_workspace() -> None:
+    """Visual Studio workspace for concepts, prompts, and visual direction, without claiming unsupported image generation."""
+    render_workspace_header("Visual Prompt Studio", "Generate visual concepts, thumbnail direction, and prompt guidance without claiming unsupported final-image generation.")
+    project_platform = render_platform_picker(key="visual_workspace_platform")
+
+    tabs = st.tabs(["Visual Concept", "Thumbnail Direction", "Image Prompt", "Saved Visual Direction"])
+
+    with tabs[0]:
+        st.markdown("### Visual Concept")
+        st.caption("A single clear concept for the project that can be reused across thumbnail and campaign work.")
+        visual_topic = st.text_input("Concept topic", value=st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("selected_title") or st.session_state.get("project_context", {}).get("idea") or "", key="visual_concept_topic")
+        if st.button("Create concept", key="visual_concept_create"):
+            if visual_topic.strip():
+                concept = f"High-contrast {project_platform} visual concept for '{visual_topic.strip()}': clear focal point, readable typography, dramatic lighting, and a curiosity-driven headline."
+                update_project_context(topic=visual_topic.strip(), visual_direction=concept, content_type="visual", platform=project_platform)
+                st.session_state["thumbnail_prompt"] = concept
+                st.success("Visual concept created and saved to project context.")
+        if st.session_state.get("thumbnail_prompt"):
+            brief_text = st.session_state.get("thumbnail_prompt") or st.session_state.get("project_context", {}).get("visual_direction") or ""
+            render_artifact_card(
+                "Visual Brief",
+                brief_text,
+                badge="Visual Brief",
+                meta="Thumbnail concept",
+            )
+            if st.button("Send concept to Chat", key="visual_concept_send_to_chat"):
+                st.session_state["main_ai_copilot_input"] = str(st.session_state["thumbnail_prompt"])
+                st.session_state["active_workspace"] = "AI Chat"
+                st.rerun()
+
+    with tabs[1]:
+        st.markdown("### Thumbnail Direction")
+        st.caption("Thumbnail-ready direction based on the current topic and platform.")
+        direction = st.text_area("Visual direction", value=st.session_state.get("project_context", {}).get("visual_direction") or st.session_state.get("thumbnail_prompt") or (f"{st.session_state.get('project_context', {}).get('selected_title') or st.session_state.get('project_context', {}).get('idea') or st.session_state.get('project_context', {}).get('topic') or 'your topic'} on {project_platform} with strong hook, readable headline, and cinematic framing."), key="visual_direction_input", height=150)
+        if st.button("Save direction", key="visual_direction_save"):
+            update_project_context(visual_direction=direction.strip(), content_type="visual", platform=project_platform)
+            st.success("Direction saved to project context.")
+        if direction.strip():
+            st.markdown(
+                f"""
+                <div class="premium-card" style="padding: 1rem; margin-top: 0.7rem;">
+                    <div class="badge" style="margin-bottom: 0.7rem;">Direction</div>
+                    <div class="meta" style="white-space: pre-wrap; line-height: 1.7;">{html_escape(direction)}</div>
                 </div>
-            </div>
-            """,
+                """,
+                unsafe_allow_html=True,
+            )
+
+    with tabs[2]:
+        st.markdown("### Image Prompt / Visual Prompt")
+        st.caption("Prompt text ready for future design or generation workflows without claiming unsupported generation features.")
+        prompt = st.text_area("Prompt", value=st.session_state.get("thumbnail_prompt") or "", key="visual_prompt_input", height=170)
+        if st.button("Generate prompt", key="visual_prompt_generate"):
+            if st.session_state.get("project_context", {}).get("topic"):
+                prompt_text = f"Create a cinematic {project_platform} thumbnail concept for '{st.session_state['project_context']['topic']}'. Use a bold headline, high contrast, readable type, strong focal point, and premium storytelling composition."
+                update_project_context(visual_direction=prompt_text, content_type="visual", platform=project_platform)
+                st.session_state["thumbnail_prompt"] = prompt_text
+                st.success("Prompt generated.")
+            else:
+                st.warning("Add a topic first to create a valid prompt.")
+        if st.session_state.get("thumbnail_prompt"):
+            st.markdown(
+                f"""
+                <div class="premium-card" style="padding: 1rem; margin-top: 0.7rem;">
+                    <div class="badge" style="margin-bottom: 0.7rem;">Prompt</div>
+                    <div class="meta" style="white-space: pre-wrap; line-height: 1.7;">{html_escape(st.session_state['thumbnail_prompt'])}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            render_copy_button(st.session_state["thumbnail_prompt"])
+
+    with tabs[3]:
+        st.markdown("### Saved Visual Direction")
+        st.caption("Reusable visual direction stored in the project context.")
+        stored = st.session_state.get("project_context", {}).get("visual_direction") or st.session_state.get("thumbnail_prompt") or ""
+        if stored:
+            brief = {
+                "Concept": st.session_state.get("project_context", {}).get("visual_direction") or "",
+                "Subject": st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "",
+                "Composition": "Strong focal point, clear hierarchy, readable headline placement.",
+                "Style": "Premium, cinematic, curiosity-driven.",
+                "Text direction": "Headline-first with high contrast and legibility.",
+                "Prompt": stored,
+            }
+            for label, value in brief.items():
+                if value:
+                    st.markdown(
+                        f"""
+                        <div class="premium-card" style="padding: 0.9rem 1rem; margin-bottom: 0.6rem;">
+                            <div class="badge" style="margin-bottom: 0.5rem;">{html_escape(label)}</div>
+                            <div class="meta" style="white-space: pre-wrap; line-height: 1.7;">{html_escape(value)}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+            if st.button("Save to project", key="visual_saved_save"):
+                update_project_context(visual_direction=stored, content_type="visual")
+                st.success("Saved to project context.")
+        else:
+            st.info("No visual direction saved yet. Create one from the other tabs.")
+
+
+def render_app_shell() -> None:
+    """ChatGPT/Gemini-style shell with a collapsible sidebar and a single active workspace view."""
+    st.session_state.setdefault("app_sidebar_open", True)
+    st.session_state.setdefault("active_workspace", "AI Chat")
+
+    left_col, middle_col, right_col = st.columns([0.08, 0.44, 0.48])
+    with left_col:
+        if st.button("☰", key="app_sidebar_toggle", help="Toggle sidebar", use_container_width=True):
+            st.session_state["app_sidebar_open"] = not st.session_state.get("app_sidebar_open", True)
+            st.rerun()
+    with middle_col:
+        current_workspace = st.session_state.get("active_workspace", "AI Chat")
+        st.markdown(
+            f"<div style='display:flex; align-items:center; height: 38px; color: #F8FAFC; font-size: 0.96rem; font-weight: 700; letter-spacing: 0.02em;'>{html_escape(current_workspace)}</div>",
             unsafe_allow_html=True,
         )
+    with right_col:
+        render_language_switcher()
+
+    if st.session_state.get("app_sidebar_open", True):
+        sidebar_col, main_col = st.columns([0.24, 0.76])
+        with sidebar_col:
+            render_app_navigation()
+        with main_col:
+            workspace = st.session_state.get("active_workspace", "AI Chat")
+            if workspace == "AI Chat":
+                render_ai_chat_workspace()
+            elif workspace == "Idea Generator":
+                render_idea_generator_workspace()
+            elif workspace == "Idea Evaluator":
+                render_idea_evaluator_workspace()
+            elif workspace == "Script Writer":
+                render_script_writer_workspace()
+            elif workspace == "SEO Optimizer":
+                render_seo_workspace()
+            elif workspace == "Visual Prompt Studio":
+                render_visual_prompt_studio_workspace()
+    else:
+        workspace = st.session_state.get("active_workspace", "AI Chat")
+        if workspace == "AI Chat":
+            render_ai_chat_workspace()
+        elif workspace == "Idea Generator":
+            render_idea_generator_workspace()
+        elif workspace == "Idea Evaluator":
+            render_idea_evaluator_workspace()
+        elif workspace == "Script Writer":
+            render_script_writer_workspace()
+        elif workspace == "SEO Optimizer":
+            render_seo_workspace()
+        elif workspace == "Visual Prompt Studio":
+            render_visual_prompt_studio_workspace()
+
+
+def render_workspace_layout() -> None:
+    """Landing-page-only layout retained for the current marketing experience."""
+    render_landing_page()
 
 
 def main() -> None:
     init_session_state()
+    st.session_state.setdefault("app_mode", "landing")
     st.set_page_config(
         page_title=t("page.title"),
         page_icon="⚡",
@@ -4228,7 +5695,11 @@ def main() -> None:
 
     inject_custom_header()
     inject_styles()
-    render_workspace_layout()
+
+    if st.session_state.get("app_mode") == "app":
+        render_app_shell()
+    else:
+        render_workspace_layout()
 
 
 if __name__ == "__main__":

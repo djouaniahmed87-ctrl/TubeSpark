@@ -107,6 +107,586 @@ I18N: dict[str, dict[str, str]] = {
         "ar": "اكتب مجال قناتك، واحصل على أفكار تحتوي عناوين وخطافات مثبتة — مجاناً للتجربة.",
         "fr": "Saisis le thème de ta chaîne et reçois des idées avec des titres et accroches éprouvés — gratuitement.",
     },
+    "nav.home": {
+        "en": "Home",
+        "ar": "الرئيسية",
+        "fr": "Accueil",
+    },
+    "nav.tools": {
+        "en": "Tools",
+        "ar": "الأدوات",
+        "fr": "Outils",
+    },
+    "nav.how": {
+        "en": "How it works",
+        "ar": "كيف يعمل",
+        "fr": "Comment ça marche",
+    },
+    "nav.pricing": {
+        "en": "Pricing",
+        "ar": "الأسعار",
+        "fr": "Tarifs",
+    },
+    "nav.start": {
+        "en": "Start free",
+        "ar": "ابدأ مجانًا",
+        "fr": "Commencer gratuitement",
+    },
+    "nav.open_app": {
+        "en": "Open App",
+        "ar": "افتح التطبيق",
+        "fr": "Ouvrir l'app",
+    },
+    "nav.back_to_landing": {
+        "en": "Back to landing",
+        "ar": "العودة إلى الصفحة الرئيسية",
+        "fr": "Retour à l'accueil",
+    },
+    "nav.faq": {
+        "en": "FAQ",
+        "ar": "الأسئلة الشائعة",
+        "fr": "FAQ",
+    },
+    "landing.workspace.kicker": {
+        "en": "WORKSPACE",
+        "ar": "مساحة العمل",
+        "fr": "ESPACE DE TRAVAIL",
+    },
+    "landing.workspace.title": {
+        "en": "Choose a tool",
+        "ar": "اختر أداة",
+        "fr": "Choisis un outil",
+    },
+    "landing.workspace.copy": {
+        "en": "Switch between the core generation workflows and build your next YouTube asset from the same live workspace.",
+        "ar": "بدّل بين سير العمل الرئيسي لبناء المحتوى وابنِ أصلًا جديدًا من نفس مساحة العمل الحالية.",
+        "fr": "Passe d'un workflow de génération à l'autre et construis ton prochain asset YouTube dans le même espace de travail.",
+    },
+    "landing.features.kicker": {
+        "en": "Features",
+        "ar": "المميزات",
+        "fr": "Fonctionnalités",
+    },
+    "landing.features.title": {
+        "en": "Built for modern content operations",
+        "ar": "مصمم لعمليات المحتوى الحديثة",
+        "fr": "Conçu pour les opérations de contenu modernes",
+    },
+    "landing.process.kicker": {
+        "en": "Process",
+        "ar": "العملية",
+        "fr": "Processus",
+    },
+    "landing.process.title": {
+        "en": "A simple workflow from idea to publish",
+        "ar": "تدفق بسيط من الفكرة إلى النشر",
+        "fr": "Un workflow simple de l'idée à la publication",
+    },
+    "landing.pricing.kicker": {
+        "en": "Pricing",
+        "ar": "الأسعار",
+        "fr": "Tarifs",
+    },
+    "landing.pricing.title": {
+        "en": "Simple pricing for creators at every stage",
+        "ar": "أسعار بسيطة للمبدعين في كل مرحلة",
+        "fr": "Des tarifs simples pour les créateurs à chaque étape",
+    },
+    "landing.faq.kicker": {
+        "en": "FAQ",
+        "ar": "الأسئلة الشائعة",
+        "fr": "FAQ",
+    },
+    "landing.faq.title": {
+        "en": "Everything you need to know",
+        "ar": "كل ما تحتاج معرفته",
+        "fr": "Tout ce qu'il faut savoir",
+    },
+    "landing.cta.kicker": {
+        "en": "Launch faster",
+        "ar": "ابدأ بسرعة",
+        "fr": "Lancez-vous vite",
+    },
+    "landing.cta.title": {
+        "en": "Turn one idea into a full content workflow.",
+        "ar": "حوّل فكرة واحدة إلى سير عمل كامل للمحتوى.",
+        "fr": "Transforme une idée en workflow de contenu complet.",
+    },
+    "workspace.app_shell_title": {
+        "en": "Product Workspace",
+        "ar": "مساحة العمل",
+        "fr": "Espace de travail",
+    },
+    "workspace.ai_chat": {
+        "en": "AI Chat",
+        "ar": "دردشة الذكاء الاصطناعي",
+        "fr": "Chat IA",
+    },
+    "workspace.idea_generator": {
+        "en": "Idea Generator",
+        "ar": "مولد الأفكار",
+        "fr": "Générateur d'idées",
+    },
+    "workspace.idea_evaluator": {
+        "en": "Idea Evaluator",
+        "ar": "مقيّم الفكرة",
+        "fr": "Évaluateur d'idées",
+    },
+    "workspace.script_writer": {
+        "en": "Script Writer",
+        "ar": "كاتب السيناريو",
+        "fr": "Rédacteur de script",
+    },
+    "workspace.seo_optimizer": {
+        "en": "SEO Optimizer",
+        "ar": "محسن السيو",
+        "fr": "Optimiseur SEO",
+    },
+    "workspace.visual_prompt_studio": {
+        "en": "Visual Prompt Studio",
+        "ar": "استوديو تعليمات المرئيات",
+        "fr": "Studio de prompts visuels",
+    },
+    "workspace.content_studio": {
+        "en": "Content Studio",
+        "ar": "استوديو المحتوى",
+        "fr": "Studio de contenu",
+    },
+    "workspace.seo_discovery": {
+        "en": "SEO & Discovery",
+        "ar": "السيو والاكتشاف",
+        "fr": "SEO & Découverte",
+    },
+    "workspace.visual_studio": {
+        "en": "Visual Studio",
+        "ar": "استوديو المرئيات",
+        "fr": "Studio visuel",
+    },
+    "workspace.label": {
+        "en": "Workspace",
+        "ar": "مساحة العمل",
+        "fr": "Espace de travail",
+    },
+    "workspace.project_context": {
+        "en": "Current Project Context",
+        "ar": "سياق المشروع الحالي",
+        "fr": "Contexte du projet",
+    },
+    "workspace.project": {
+        "en": "Project",
+        "ar": "المشروع",
+        "fr": "Projet",
+    },
+    "workspace.platform": {
+        "en": "Platform",
+        "ar": "المنصة",
+        "fr": "Plateforme",
+    },
+    "workspace.content_type": {
+        "en": "Content Type",
+        "ar": "نوع المحتوى",
+        "fr": "Type de contenu",
+    },
+    "workspace.assets": {
+        "en": "Assets",
+        "ar": "الأصول",
+        "fr": "Ressources",
+    },
+    "workspace.titles": {
+        "en": "Titles",
+        "ar": "العناوين",
+        "fr": "Titres",
+    },
+    "workspace.seo": {
+        "en": "SEO",
+        "ar": "السيو",
+        "fr": "SEO",
+    },
+    "workspace.visual": {
+        "en": "Visual",
+        "ar": "مرئي",
+        "fr": "Visuel",
+    },
+    "workspace.ready": {
+        "en": "ready",
+        "ar": "جاهز",
+        "fr": "prêt",
+    },
+    "workspace.not_generated": {
+        "en": "not generated",
+        "ar": "غير مُولَّد",
+        "fr": "non généré",
+    },
+    "workspace.partial": {
+        "en": "partial",
+        "ar": "جزئي",
+        "fr": "partiel",
+    },
+    "workspace.not_set": {
+        "en": "Not set yet",
+        "ar": "غير محدد بعد",
+        "fr": "Pas encore défini",
+    },
+    "workspace.use_content_studio": {
+        "en": "Use in Content Studio",
+        "ar": "استخدم في استوديو المحتوى",
+        "fr": "Utiliser dans le studio de contenu",
+    },
+    "workspace.send_to_seo": {
+        "en": "Send to SEO",
+        "ar": "إرسال إلى السيو",
+        "fr": "Envoyer au SEO",
+    },
+    "workspace.send_to_visual": {
+        "en": "Send to Visual",
+        "ar": "إرسال إلى المرئي",
+        "fr": "Envoyer au visuel",
+    },
+    "workspace.save_to_project": {
+        "en": "Save to Project",
+        "ar": "حفظ في المشروع",
+        "fr": "Enregistrer dans le projet",
+    },
+    "workspace.ai_chat_desc": {
+        "en": "A centralized workspace to guide the user into the appropriate product workflow without forcing a single path.",
+        "ar": "مساحة عمل مركزية لتوجيه المستخدم إلى سير العمل المناسب دون إجباره على مسار واحد.",
+        "fr": "Un espace de travail centralisé pour guider l'utilisateur vers le bon workflow sans le forcer dans un seul chemin.",
+    },
+    "workspace.content_studio_desc": {
+        "en": "The primary content creation workspace where idea generation, titles, evaluation, scripts, descriptions, hashtags, and discovery tags work together.",
+        "ar": "مساحة العمل الأساسية لإنشاء المحتوى حيث تعمل توليد الأفكار، العناوين، التقييم، السكريبتات، الأوصاف، الهاشتاغات، وعلامات الاكتشاف معًا.",
+        "fr": "Le workspace principal de création de contenu où génération d'idées, titres, évaluation, scripts, descriptions, hashtags et tags de découverte travaillent ensemble.",
+    },
+    "workspace.seo_discovery_desc": {
+        "en": "Search optimization and discovery workflows for the current project, grouped into concrete tool sections.",
+        "ar": "سير عمل تحسين محركات البحث والاكتشاف للمشروع الحالي، مُجمّع في أقسام أدوات محددة.",
+        "fr": "Les workflows de SEO et de découverte du projet actuel, regroupés dans des sections d'outils concrètes.",
+    },
+    "workspace.visual_studio_desc": {
+        "en": "A dedicated visual content workspace for thumbnail concepts, image prompts, and saved visual direction.",
+        "ar": "مساحة عمل مرئية مخصصة لمفاهيم الصور المصغرة، برومبت الصور، والتوجيه البصري المحفوظ.",
+        "fr": "Un espace de travail visuel dédié aux concepts de miniatures, prompts d'images et direction visuelle enregistrée.",
+    },
+    "chat.welcome": {
+        "en": "Welcome. Tell me the topic or request and I will read the current project context before routing it to the right workflow.",
+        "ar": "مرحبًا. أخبرني بعنوان المشروع أو طلبك وسأقرأ سياق المشروع الحالي قبل توجيهه إلى سير العمل المناسب.",
+        "fr": "Bienvenue. Donne-moi le sujet ou la demande et je lirai le contexte actuel du projet avant de le diriger vers le bon workflow.",
+    },
+    "chat.suggested_actions": {
+        "en": "Suggested Actions",
+        "ar": "إجراءات مقترحة",
+        "fr": "Actions suggérées",
+    },
+    "chat.action.generate_ideas": {
+        "en": "Generate Ideas",
+        "ar": "إنشاء أفكار",
+        "fr": "Générer des idées",
+    },
+    "chat.action.generate_titles": {
+        "en": "Generate Titles",
+        "ar": "إنشاء عناوين",
+        "fr": "Générer des titres",
+    },
+    "chat.action.create_script": {
+        "en": "Create Script",
+        "ar": "إنشاء Script",
+        "fr": "Créer un script",
+    },
+    "chat.action.create_seo": {
+        "en": "Create SEO",
+        "ar": "إنشاء سيو",
+        "fr": "Créer le SEO",
+    },
+    "chat.action.generate_keywords": {
+        "en": "Generate Keywords",
+        "ar": "إنشاء كلمات مفتاحية",
+        "fr": "Générer des mots-clés",
+    },
+    "chat.action.create_visual": {
+        "en": "Create Visual",
+        "ar": "إنشاء مرئي",
+        "fr": "Créer un visuel",
+    },
+    "chat.ai_copilot": {
+        "en": "AI Copilot",
+        "ar": "مساعد الذكاء الاصطناعي",
+        "fr": "Assistant IA",
+    },
+    "footer.brand": {
+        "en": "TubeSpark",
+        "ar": "TubeSpark",
+        "fr": "TubeSpark",
+    },
+    "footer.tagline": {
+        "en": "Smart YouTube idea generator",
+        "ar": "مولّد أفكار يوتيوب الذكي",
+        "fr": "Générateur d'idées YouTube intelligent",
+    },
+    "footer.terms": {
+        "en": "Terms",
+        "ar": "الشروط",
+        "fr": "Conditions",
+    },
+    "footer.privacy": {
+        "en": "Privacy",
+        "ar": "الخصوصية",
+        "fr": "Confidentialité",
+    },
+    "footer.support": {
+        "en": "Support",
+        "ar": "الدعم",
+        "fr": "Support",
+    },
+    "metric.ai_powered": {
+        "en": "AI-powered",
+        "ar": "مدعوم بالذكاء الاصطناعي",
+        "fr": "Piloté par l'IA",
+    },
+    "metric.content_creation": {
+        "en": "content creation",
+        "ar": "إنشاء المحتوى",
+        "fr": "création de contenu",
+    },
+    "metric.tools": {
+        "en": "3+ tools",
+        "ar": "أكثر من 3 أدوات",
+        "fr": "3+ outils",
+    },
+    "metric.workflow": {
+        "en": "core workflows",
+        "ar": "سير عمل أساسي",
+        "fr": "workflows principaux",
+    },
+    "metric.fast": {
+        "en": "Fast",
+        "ar": "سريع",
+        "fr": "Rapide",
+    },
+    "metric.generation": {
+        "en": "generation",
+        "ar": "التوليد",
+        "fr": "génération",
+    },
+    "metric.core": {
+        "en": "core workflows",
+        "ar": "سير العمل الأساسي",
+        "fr": "workflows centraux",
+    },
+    "metric.content": {
+        "en": "content creation",
+        "ar": "إنشاء المحتوى",
+        "fr": "création de contenu",
+    },
+    "metric.ready": {
+        "en": "ready",
+        "ar": "جاهز",
+        "fr": "prêt",
+    },
+    "metric.not_generated": {
+        "en": "not generated",
+        "ar": "غير مُنشأ",
+        "fr": "non généré",
+    },
+    "metric.none": {
+        "en": "None",
+        "ar": "لا شيء",
+        "fr": "Aucun",
+    },
+    "metric.assets": {
+        "en": "Assets Available",
+        "ar": "الأصول المتاحة",
+        "fr": "Ressources disponibles",
+    },
+    "metric.video": {
+        "en": "video",
+        "ar": "فيديو",
+        "fr": "vidéo",
+    },
+    "ui.placeholder": {
+        "en": "Example: I want to create content about AI productivity...",
+        "ar": "مثال: أريد إنشاء محتوى حول إنتاجية الذكاء الاصطناعي...",
+        "fr": "Exemple : je veux créer du contenu sur la productivité IA...",
+    },
+    "metric.not_set": {
+        "en": "Not set yet",
+        "ar": "غير محدد بعد",
+        "fr": "Pas encore défini",
+    },
+    "metric.idea": {
+        "en": "Idea",
+        "ar": "الفكرة",
+        "fr": "Idée",
+    },
+    "metric.title": {
+        "en": "Title",
+        "ar": "العنوان",
+        "fr": "Titre",
+    },
+    "metric.script": {
+        "en": "Script",
+        "ar": "سكريبت",
+        "fr": "Script",
+    },
+    "metric.seo": {
+        "en": "SEO",
+        "ar": "السيو",
+        "fr": "SEO",
+    },
+    "metric.visual": {
+        "en": "Visual",
+        "ar": "مرئي",
+        "fr": "Visuel",
+    },
+    "metric.created": {
+        "en": "created",
+        "ar": "تم إنشاؤه",
+        "fr": "créé",
+    },
+    "metric.saved": {
+        "en": "saved",
+        "ar": "تم حفظه",
+        "fr": "enregistré",
+    },
+    "metric.use": {
+        "en": "Use",
+        "ar": "استخدام",
+        "fr": "Utiliser",
+    },
+    "metric.select": {
+        "en": "Select",
+        "ar": "تحديد",
+        "fr": "Sélectionner",
+    },
+    "metric.generate": {
+        "en": "Generate",
+        "ar": "إنشاء",
+        "fr": "Générer",
+    },
+    "metric.save": {
+        "en": "Save",
+        "ar": "حفظ",
+        "fr": "Enregistrer",
+    },
+    "metric.current": {
+        "en": "Current",
+        "ar": "الحالي",
+        "fr": "Actuel",
+    },
+    "metric.project": {
+        "en": "Project",
+        "ar": "المشروع",
+        "fr": "Projet",
+    },
+    "metric.ideas": {
+        "en": "ideas generated",
+        "ar": "أفكار تم توليدها",
+        "fr": "idées générées",
+    },
+    "metric.rating": {
+        "en": "creator rating",
+        "ar": "تقييم المبدعين",
+        "fr": "note des créateurs",
+    },
+    "metric.workflow": {
+        "en": "to workflow",
+        "ar": "إلى سير العمل",
+        "fr": "vers le workflow",
+    },
+    "landing.tools.kicker": {
+        "en": "Tools",
+        "ar": "الأدوات",
+        "fr": "Outils",
+    },
+    "landing.tools.title": {
+        "en": "Everything needed to publish stronger content",
+        "ar": "كل ما تحتاجه لنشر محتوى أقوى",
+        "fr": "Tout ce qu'il faut pour publier un contenu plus fort",
+    },
+    "landing.how.kicker": {
+        "en": "Process",
+        "ar": "العملية",
+        "fr": "Processus",
+    },
+    "landing.how.title": {
+        "en": "A simple workflow from idea to publish",
+        "ar": "تدفق بسيط من الفكرة إلى النشر",
+        "fr": "Un workflow simple de l'idée à la publication",
+    },
+    "tool.idea.title": {
+        "en": "Content Ideas",
+        "ar": "أفكار المحتوى",
+        "fr": "Idées de contenu",
+    },
+    "tool.idea.copy": {
+        "en": "Generate high-converting video angles and niche hooks.",
+        "ar": "أنشئ زوايا فيديو قوية ومخططات تنافسية مناسبة لنشاطك.",
+        "fr": "Génère des angles vidéo et des accroches adaptées à ta niche.",
+    },
+    "tool.script.title": {
+        "en": "Script Writer",
+        "ar": "كاتب السكريبت",
+        "fr": "Rédacteur de script",
+    },
+    "tool.script.copy": {
+        "en": "Turn your idea into a clean and engaging video script.",
+        "ar": "حوّل فكرتك إلى سكريبت فيديو منظم وجذاب.",
+        "fr": "Transforme ton idée en script vidéo clair et engageant.",
+    },
+    "tool.seo.title": {
+        "en": "SEO Booster",
+        "ar": "محسن السيو",
+        "fr": "Boost SEO",
+    },
+    "tool.seo.copy": {
+        "en": "Improve titles, tags, descriptions, and reach.",
+        "ar": "حسّن العناوين، الوسوم، والوصف للوصول الأفضل.",
+        "fr": "Améliore titres, tags et descriptions pour plus de visibilité.",
+    },
+    "tool.thumbnail.title": {
+        "en": "Thumbnail Prompt",
+        "ar": "برومبت الصورة المصغرة",
+        "fr": "Prompt miniature",
+    },
+    "tool.thumbnail.copy": {
+        "en": "Build punchy thumbnail concepts with strong visual hooks.",
+        "ar": "أنشئ أفكاراً قوية لصورة مصغرة ذات جاذبية مرئية عالية.",
+        "fr": "Crée des concepts de miniature percutants et visuellement forts.",
+    },
+    "tool.use": {
+        "en": "Use tool",
+        "ar": "استخدم الأداة",
+        "fr": "Utiliser",
+    },
+    "how.idea.title": {
+        "en": "Idea",
+        "ar": "الفكرة",
+        "fr": "Idée",
+    },
+    "how.idea.copy": {
+        "en": "Start from a valuable niche or hook.",
+        "ar": "ابدأ من فكرة أو زاوية ذات قيمة.",
+        "fr": "Commence par une niche ou une accroche utile.",
+    },
+    "how.create.title": {
+        "en": "Create",
+        "ar": "الإنشاء",
+        "fr": "Créer",
+    },
+    "how.create.copy": {
+        "en": "Generate the script, outline, and concept.",
+        "ar": "أنشئ السكريبت، المخطط، والفكرة الأساسية.",
+        "fr": "Génère le script, le plan et le concept.",
+    },
+    "how.optimize.title": {
+        "en": "Optimize",
+        "ar": "التحسين",
+        "fr": "Optimiser",
+    },
+    "how.optimize.copy": {
+        "en": "Sharpen titles, SEO, and engagement.",
+        "ar": "حسّن العناوين، السيو، والتفاعل.",
+        "fr": "Affine les titres, le SEO et l'engagement.",
+    },
     "page.title": {
         "en": "TubeSpark — YouTube idea generator",
         "ar": "TubeSpark — مولّد أفكار يوتيوب",
