@@ -1931,9 +1931,8 @@ def chunked(items: list[Idea], size: int = 3) -> list[list[Idea]]:
 # --------------------------------------------------------------------------------------
 
 CSS_TEMPLATE = """
-__FONT_IMPORT__
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
+__FONT_IMPORT__
 :root {
     --primary-1: #8B5CF6;
     --primary-2: #EC4899;

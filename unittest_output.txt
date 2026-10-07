@@ -1,0 +1,6 @@
+test_font_import_is_inside_style_block (test_css_template.CssTemplateTests.test_font_import_is_inside_style_block) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
