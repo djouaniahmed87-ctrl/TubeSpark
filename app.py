@@ -3301,24 +3301,27 @@ def inject_styles() -> None:
         }
 
         .stButton > button {
-            background: linear-gradient(135deg, #8B5CF6, #EC4899) !important;
-            color: white !important;
-            font-size: 0.95rem !important;
+            background: transparent !important;
+            color: #F8FAFC !important;
+            font-size: 1.2rem !important;
             font-weight: 700 !important;
-            border-radius: 14px !important;
-            min-height: 46px !important;
-            padding: 0.7rem 1rem !important;
-            width: 100% !important;
+            border: 1px solid rgba(148, 163, 184, 0.35) !important;
+            border-radius: 10px !important;
+            min-height: 42px !important;
+            min-width: 52px !important;
+            padding: 0.35rem 0.7rem !important;
+            width: auto !important;
             text-align: center !important;
+            box-shadow: none !important;
         }
 
         .ts-side-panel {
-            background: rgba(15, 23, 42, 0.74);
-            border: 1px solid rgba(148, 163, 184, 0.22);
-            border-radius: 22px;
-            padding: 1rem;
-            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.28);
-            backdrop-filter: blur(12px);
+            background: transparent;
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            border-radius: 18px;
+            padding: 0;
+            box-shadow: none;
+            backdrop-filter: none;
         }
 
         .ts-chat-shell {
@@ -3328,11 +3331,11 @@ def inject_styles() -> None:
         }
 
         .ts-workspace-panel {
-            background: rgba(15, 23, 42, 0.45);
+            background: transparent;
             border: 1px solid rgba(148, 163, 184, 0.18);
-            border-radius: 22px;
-            padding: 1rem 1.1rem;
-            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
+            border-radius: 18px;
+            padding: 0;
+            box-shadow: none;
             overflow: hidden;
         }
 
@@ -3591,9 +3594,9 @@ def render_ai_chat_panel() -> None:
         )
     with mic_col:
         if st.button("🎤", key="copilot_mic", help="تسجيل صوتي", use_container_width=True):
-            st.session_state["main_ai_copilot_input"] = "ملاحظة صوتية: أريد فكرة أقوى لقناة يوتيوب." 
+            st.session_state["main_ai_copilot_input"] = "ملاحظة صوتية: أريد فكرة أقوى لقناة يوتيوب."
     with send_col:
-        if st.button("🚀 إرسال", key="copilot_send", help="إرسال الرسالة", use_container_width=True):
+        if st.button("🚀", key="copilot_send", help="إرسال الرسالة", use_container_width=True):
             if st.session_state.get("main_ai_copilot_input", "").strip():
                 prompt = st.session_state["main_ai_copilot_input"].strip()
                 st.session_state["copilot_messages"].append({"role": "user", "content": prompt})
@@ -4184,11 +4187,11 @@ def render_seo_tab() -> None:
 
 def render_thumbnail_prompt_tab() -> None:
     lang = current_lang()
-    prompt_title = "Thumbnail Prompt Generator" if lang == "en" else "صانع برومبتات الصور المصغرة" if lang == "ar" else "Générateur de prompts de miniature"
-    topic_label = "Video topic" if lang == "en" else "موضوع الفيديو" if lang == "ar" else "Sujet de la vidéo"
-    niche_label = "Niche" if lang == "en" else "المجال" if lang == "ar" else "Niche"
-    generate_btn = "Generate prompt" if lang == "en" else "إنشاء البرومبت" if lang == "ar" else "Générer le prompt"
-    copy_btn = "Copy prompt" if lang == "en" else "نسخ البرومبت" if lang == "ar" else "Copier le prompt"
+    prompt_title = "صانع برومبتات الصور المصغرة" if lang == "ar" else "Thumbnail Prompt Generator" if lang == "en" else "Générateur de prompts de miniature"
+    topic_label = "موضوع الفيديو" if lang == "ar" else "Video topic" if lang == "en" else "Sujet de la vidéo"
+    niche_label = "مجالك" if lang == "ar" else "Niche" if lang == "en" else "Niche"
+    generate_btn = "توليد البرومبت" if lang == "ar" else "Generate prompt" if lang == "en" else "Générer le prompt"
+    copy_btn = "نسخ البرومبت" if lang == "ar" else "Copy prompt" if lang == "en" else "Copier le prompt"
 
     st.markdown(f"<div class='ts-section'><h2>{prompt_title}</h2></div>", unsafe_allow_html=True)
     topic = st.text_input(topic_label, key="thumbnail_topic", value=st.session_state.get("seo_topic", ""), placeholder="e.g. beginner crypto mistakes")
@@ -4252,8 +4255,13 @@ def render_manual_workspace() -> None:
 
 
 def render_workspace_layout() -> None:
-    """Strict 70/30 split: workspace on the left, chat panel on the right."""
-    col_workspace, col_chat = st.columns([7, 3])
+    """Strict 70/30 split: chat on the visual right, workspace on the left."""
+    col_chat, col_workspace = st.columns([3, 7])
+
+    with col_chat:
+        st.markdown('<div class="ts-side-panel">', unsafe_allow_html=True)
+        render_ai_chat_panel()
+        st.markdown('</div>', unsafe_allow_html=True)
 
     with col_workspace:
         st.markdown('<div class="ts-workspace-panel">', unsafe_allow_html=True)
@@ -4266,11 +4274,6 @@ def render_workspace_layout() -> None:
             render_seo_tab()
         with tabs[3]:
             render_thumbnail_prompt_tab()
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with col_chat:
-        st.markdown('<div class="ts-side-panel">', unsafe_allow_html=True)
-        render_ai_chat_panel()
         st.markdown('</div>', unsafe_allow_html=True)
 
 
