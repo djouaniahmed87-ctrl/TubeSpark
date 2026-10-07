@@ -1986,27 +1986,49 @@ CSS_TEMPLATE = """
 <style>
 __FONT_IMPORT__
 :root {
+    /* Unified Design Tokens */
+    --bg: #090D16;
+    --surface-1: #0F1522;
+    --surface-2: #141B2A;
+    --surface-3: #192235;
+    --surface-input: #0C121E;
+
+    --text-primary: #F5F7FB;
+    --text-secondary: #CBD5E1;
+    --text-muted: #94A3B8;
+    --text-subtle: #64748B;
+
+    --primary: #8B5CF6;
+    --primary-hover: #A78BFA;
+    --primary-soft: rgba(139, 92, 246, 0.14);
+    --primary-border: rgba(139, 92, 246, 0.32);
+    --primary-glow: rgba(139, 92, 246, 0.18);
+
+    --success: #22C55E;
+    --warning: #F59E0B;
+    --error: #F43F5E;
+    --info: #38BDF8;
+
+    --border-subtle: rgba(148, 163, 184, 0.10);
+    --border-default: rgba(148, 163, 184, 0.16);
+    --border-strong: rgba(148, 163, 184, 0.24);
+
+    /* Legacy Mappings to ensure 100% backward compatibility */
     --primary-1: #8B5CF6;
     --primary-2: #EC4899;
     --accent: #A855F7;
-    --ink: #F1F5F9;
+    --ink: #F5F7FB;
     --muted: #94A3B8;
-    --bg-dark: #0F172A;
-    --bg-gradient: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F172A 100%);
-    --card-bg: rgba(30, 41, 59, 0.7);
-    --card-border: rgba(139, 92, 246, 0.3);
-    --glow: rgba(139, 92, 246, 0.5);
+    --bg-dark: #090D16;
+    --bg-gradient: linear-gradient(180deg, #090D16 0%, #0F1522 50%, #141B2A 100%);
+    --card-bg: #0F1522;
+    --card-border: rgba(148, 163, 184, 0.16);
+    --glow: rgba(139, 92, 246, 0.18);
 }
 
 * {
     font-family: __FONT__;
-    direction: rtl !important;
-    text-align: right !important;
-}
-
-html, body, .stApp {
-    direction: rtl !important;
-    text-align: right !important;
+    box-sizing: border-box;
 }
 
 html, body, .stApp {
@@ -3208,24 +3230,24 @@ def render_html(markup: str) -> None:
 
 
 def inject_custom_header() -> None:
-    """Injects a premium SaaS-style top navigation bar with brand, links, and language toggle."""
+    """Injects a premium SaaS-style top navigation bar with brand and features."""
     render_html(
-        """
+        f"""
         <style>
-        .ts-topbar {
+        .ts-topbar {{
             position: sticky;
             top: 0;
             z-index: 9999;
             width: 100%;
-            background: rgba(15, 23, 42, 0.82);
+            background: rgba(15, 23, 42, 0.88);
             border-bottom: 1px solid rgba(148, 163, 184, 0.18);
             backdrop-filter: blur(18px);
             -webkit-backdrop-filter: blur(18px);
             margin: 0;
-            padding: 0.9rem 0;
-        }
+            padding: 0.8rem 0;
+        }}
 
-        .ts-topbar-shell {
+        .ts-topbar-shell {{
             max-width: 1280px;
             margin: 0 auto;
             padding: 0 1.5rem;
@@ -3233,18 +3255,18 @@ def inject_custom_header() -> None:
             align-items: center;
             justify-content: space-between;
             gap: 1rem;
-        }
+        }}
 
-        .ts-brand-wrap {
+        .ts-brand-wrap {{
             display: flex;
             align-items: center;
             gap: 0.8rem;
             min-width: 0;
-        }
+        }}
 
-        .ts-brand-mark {
-            width: 36px;
-            height: 36px;
+        .ts-brand-mark {{
+            width: 38px;
+            height: 38px;
             border-radius: 12px;
             display: flex;
             align-items: center;
@@ -3253,99 +3275,58 @@ def inject_custom_header() -> None:
             color: white;
             font-weight: 800;
             box-shadow: 0 12px 26px rgba(139, 92, 246, 0.35);
-        }
+        }}
 
-        .ts-brand-text {
-            font-size: 1.05rem;
+        .ts-brand-text {{
+            font-size: 1.1rem;
             font-weight: 800;
             color: #F8FAFC;
             letter-spacing: 0.02em;
-        }
+        }}
 
-        .ts-topbar-nav {
+        .ts-topbar-nav {{
             display: flex;
             align-items: center;
             gap: 1.5rem;
             color: rgba(226, 232, 240, 0.82);
             font-size: 0.9rem;
             font-weight: 600;
-        }
+        }}
 
-        .ts-topbar-nav span {
+        .ts-topbar-nav span {{
             display: inline-flex;
             align-items: center;
             justify-content: center;
             min-height: 2.2rem;
             cursor: default;
-        }
+        }}
 
-        .ts-topbar-actions {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .ts-lang-switch {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.3rem;
-            padding: 0.25rem;
-            border-radius: 999px;
-            background: rgba(15, 23, 42, 0.7);
-            border: 1px solid rgba(148, 163, 184, 0.2);
-        }
-
-        .ts-lang-btn {
-            min-width: 62px;
-            min-height: 34px;
-            border: none;
-            border-radius: 999px;
-            padding: 0.4rem 0.8rem;
-            background: transparent;
-            color: rgba(226, 232, 240, 0.8);
-            font-size: 0.76rem;
-            font-weight: 700;
-            letter-spacing: 0.02em;
-        }
-
-        .ts-lang-btn.is-active {
-            background: linear-gradient(135deg, #8B5CF6, #A855F7);
-            color: #fff;
-            box-shadow: 0 8px 18px rgba(139, 92, 246, 0.35);
-        }
-
-        .stApp {
+        .stApp {{
             padding-top: 0 !important;
-        }
-        header {
+        }}
+        header {{
             display: none !important;
-        }
-        footer {
+        }}
+        footer {{
             display: none !important;
-        }
-        [data-testid="stToolbar"] {
+        }}
+        [data-testid="stToolbar"] {{
             display: none !important;
-        }
-        [data-testid="stSidebar"] {
+        }}
+        [data-testid="stSidebar"] {{
             display: none !important;
-        }
+        }}
         </style>
         <div class="ts-topbar">
             <div class="ts-topbar-shell">
                 <div class="ts-brand-wrap">
-                    <div class="ts-brand-mark">M</div>
-                    <div class="ts-brand-text">Mayki Digital Tools</div>
+                    <div class="ts-brand-mark">⚡</div>
+                    <div class="ts-brand-text">TubeSpark</div>
                 </div>
                 <div class="ts-topbar-nav">
                     <span>Features</span>
                     <span>How it works</span>
                     <span>Pricing</span>
-                </div>
-                <div class="ts-topbar-actions">
-                    <div class="ts-lang-switch">
-                        <button class="ts-lang-btn is-active">EN</button>
-                        <button class="ts-lang-btn">العربية</button>
-                    </div>
                 </div>
             </div>
         </div>
@@ -3370,8 +3351,6 @@ def inject_styles() -> None:
         <style>
         * {
             box-sizing: border-box;
-            direction: rtl !important;
-            text-align: right !important;
         }
 
         html, body {
