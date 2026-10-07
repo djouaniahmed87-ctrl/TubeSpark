@@ -4183,7 +4183,7 @@ def render_thumbnail_prompt_tab() -> None:
 
 
 def render_workspace_layout() -> None:
-    """Landing page with a polished SaaS hero and direct links to each real tool page."""
+    """Single-file robust navigation: a landing page with in-app tool switching."""
     st.markdown('<div class="ts-shell">', unsafe_allow_html=True)
     hero_col, tool_col = st.columns([1.18, 1.02], gap="large")
 
@@ -4197,33 +4197,46 @@ def render_workspace_layout() -> None:
                 <div class="ts-card" style="margin: 1rem; background: rgba(15,23,42,0.68); border: 1px solid rgba(148,163,184,0.16);">
                     <div class="ts-card-kicker">Workspace</div>
                     <h3>Choose a tool</h3>
-                    <p>Jump into the generator, script writer, SEO optimizer, or thumbnail prompt builder.</p>
+                    <p>Jump between the generator, script writer, SEO optimizer, and thumbnail prompt builder.</p>
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        nav_cols = st.columns(2)
-        with nav_cols[0]:
-            st.page_link("pages/1_💡_Ideas_Generator.py", label="💡 Ideas Generator", icon="💡")
-            st.page_link("pages/3_🔍_SEO_Optimizer.py", label="🔍 SEO Optimizer", icon="🔍")
-        with nav_cols[1]:
-            st.page_link("pages/2_📝_Script_Writer.py", label="📝 Script Writer", icon="📝")
-            st.page_link("pages/4_🎨_Thumbnail_Prompts.py", label="🎨 Thumbnail Prompts", icon="🎨")
+        tool_choice = st.radio(
+            "Navigation",
+            ["Home", "Ideas", "Script", "SEO", "Thumbnail"],
+            horizontal=True,
+            index=0,
+            label_visibility="collapsed",
+            key="tool_nav",
+        )
+
+        if tool_choice == "Ideas":
+            render_generator_tab()
+        elif tool_choice == "Script":
+            render_script_tab()
+        elif tool_choice == "SEO":
+            render_seo_tab()
+        elif tool_choice == "Thumbnail":
+            render_thumbnail_prompt_tab()
+        else:
+            st.caption("Use the controls above to jump into the live generation tools.")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown(
-        """
-        <div class="ts-shell">
-            <div class="ts-card">
-                <div class="ts-card-kicker">Why creators use TubeSpark</div>
-                <h3>From niche research to title optimization and AI writing.</h3>
+    if tool_choice == "Home":
+        st.markdown(
+            """
+            <div class="ts-shell">
+                <div class="ts-card">
+                    <div class="ts-card-kicker">Why creators use TubeSpark</div>
+                    <h3>From niche research to title optimization and AI writing.</h3>
+                </div>
             </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 def main() -> None:
