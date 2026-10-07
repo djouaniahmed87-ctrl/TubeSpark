@@ -205,6 +205,8 @@ class SEOData:
     seo_titles: tuple[str, ...]
     clickbait_titles: tuple[str, ...]
     chapters: tuple[str, ...]
+    seo_description: str = ""
+    seo_tags: tuple[str, ...] = ()
 
 
 # --------------------------------------------------------------------------------------
@@ -805,6 +807,11 @@ FIELDS
   * Be 50-70 characters ideal (max 100)
   * Maintain credibility and not be misleading
 
+- "seo_description": a polished YouTube description optimized for search and copy-ready.
+  It must mention the main keyword in the first 2 lines and have a natural structure.
+
+- "seo_tags": an array of 8-12 keyword tags tied to the main topic and niche.
+
 - "chapters": an array of 5-8 timestamped chapter entries for the video description.
   Each entry should be a concise 2-6 word description of a major section with its
   approximate timestamp (e.g., "0:00 - Hook", "1:30 - Main Point").
@@ -814,6 +821,7 @@ RULES
 - Thumbnail texts must be ultra-short (2-4 words max)
 - SEO titles must include the main keyword naturally
 - Clickbait titles must be curiosity-driven but not misleading
+- SEO description must be ready to paste into YouTube
 - Chapters should follow logical video progression
 - Focus on high-volume, low-competition keywords with practical search intent
 - {rules}
@@ -825,6 +833,8 @@ Reply with one valid JSON object using exactly this shape:
   "thumbnail_texts": ["...", "..."],
   "seo_titles": ["...", "..."],
   "clickbait_titles": ["...", "..."],
+  "seo_description": "...",
+  "seo_tags": ["...", "..."],
   "chapters": ["...", "..."]
 }}"""
 
@@ -886,11 +896,21 @@ def _seo_from_groq(
         else ()
     )
 
+    seo_description = _model_text(data.get("seo_description"), 1200)
+    raw_tags = data.get("seo_tags")
+    seo_tags = (
+        tuple(_model_text(tag, 50) for tag in raw_tags if _model_text(tag))[:12]
+        if isinstance(raw_tags, list)
+        else ()
+    )
+
     return SEOData(
         thumbnail_texts=thumbnail_texts,
         seo_titles=seo_titles,
         clickbait_titles=clickbait_titles,
         chapters=chapters,
+        seo_description=seo_description,
+        seo_tags=seo_tags,
     )
 
 
@@ -3351,6 +3371,126 @@ def render_social_proof() -> None:
     )
 
 
+def _sync_chat_state(payload: dict[str, str]) -> None:
+    """Transfers the structured Copilot output into the main session state."""
+    if not payload:
+        return
+
+    if payload.get("niche"):
+        st.session_state["niche"] = payload["niche"]
+        st.session_state["ideas_niche"] = payload["niche"]
+    if payload.get("script_niche"):
+        st.session_state["script_niche"] = payload["script_niche"]
+    if payload.get("script_idea"):
+        st.session_state["script_idea"] = payload["script_idea"]
+    if payload.get("seo_topic"):
+        st.session_state["seo_topic"] = payload["seo_topic"]
+    if payload.get("seo_niche"):
+        st.session_state["seo_niche"] = payload["seo_niche"]
+    if payload.get("video_topic"):
+        st.session_state["seo_topic"] = payload["video_topic"]
+
+
+def _extract_key_value_pairs(prompt: str) -> dict[str, str]:
+    """Heuristic extractor for simple structured chat prompts."""
+    text = prompt.strip()
+    if not text:
+        return {}
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return {}
+
+    result: dict[str, str] = {}
+    for line in lines:
+        if ":" in line:
+            key, value = line.split(":", 1)
+            key = key.strip().lower().replace(" ", "_")
+            value = value.strip()
+            if key and value:
+                result[key] = value
+    if not result:
+        candidate = text
+        if len(candidate) > 100:
+            candidate = candidate[:100]
+        result["script_idea"] = text
+        result["niche"] = st.session_state.get("niche", "general")
+    return result
+
+
+def _copilot_reply(prompt: str, lang: str) -> str:
+    """Generates a short structured Copilot response and syncs it into session state."""
+    cleaned = (prompt or "").strip()
+    if not cleaned:
+        return "Please tell me what you want to create."
+
+    if groq_is_ready():
+        try:
+            system = (
+                "You are a helpful YouTube content strategist. Answer in a short, practical way. "
+                "Return a JSON object with keys: niche, script_idea, seo_topic, seo_niche, summary."
+            )
+            payload = _groq_json(system, f"User request: {cleaned}", temperature=0.7)
+            if isinstance(payload, dict):
+                data = {
+                    "niche": _model_text(payload.get("niche"), 80),
+                    "script_idea": _model_text(payload.get("script_idea"), 220),
+                    "seo_topic": _model_text(payload.get("seo_topic"), 120),
+                    "seo_niche": _model_text(payload.get("seo_niche"), 80),
+                    "summary": _model_text(payload.get("summary"), 280),
+                }
+                _sync_chat_state(data)
+                return data.get("summary") or "I’ve updated the main fields based on your request."
+        except Exception:
+            pass
+
+    words = cleaned.split()
+    niche = st.session_state.get("niche") or "general"
+    topic = " ".join(words[:8])
+    summary = (
+        "I’ve mapped your idea into the main workflow. The niche has been prepared and the script/SEO fields can now be updated from the same content."
+        if lang == "en"
+        else "لقد ربطت فكرتك بمسار العمل الرئيسي. تم تجهيز المجال ويمكن الآن تحديث حقول السكربت والسيو من نفس المحتوى."
+        if lang == "ar"
+        else "J’ai relié ton idée au flux principal. Le secteur est prêt et les champs de script/SEO peuvent maintenant être mis à jour depuis ce même contenu."
+    )
+    data = {
+        "niche": niche,
+        "script_idea": cleaned,
+        "seo_topic": topic,
+        "seo_niche": niche,
+        "summary": summary,
+    }
+    _sync_chat_state(data)
+    return summary
+
+
+def render_ai_chat_panel() -> None:
+    """A lightweight Copilot-style assistant that feeds the main app state."""
+    st.session_state.setdefault("copilot_messages", [
+        {
+            "role": "assistant",
+            "content": "Hello! Tell me your topic or idea and I’ll sync it into the generator, script, and SEO sections.",
+        }
+    ])
+
+    chat_box = st.container()
+    with chat_box:
+        for message in st.session_state["copilot_messages"]:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+
+    user_prompt = st.chat_input("Ask the Copilot about your next video...")
+    if user_prompt:
+        st.session_state["copilot_messages"].append({"role": "user", "content": user_prompt})
+        with st.chat_message("user"):
+            st.markdown(user_prompt)
+
+        reply = _copilot_reply(user_prompt, current_lang())
+        st.session_state["copilot_messages"].append({"role": "assistant", "content": reply})
+        with st.chat_message("assistant"):
+            st.markdown(reply)
+
+
 def render_idea_cards(ideas: list[Idea], niche: str, *, platform: str) -> None:
     lang = current_lang()
     core_label = html_escape(t("card.core"))
@@ -3573,6 +3713,8 @@ def render_footer() -> None:
 
 def render_generator_tab() -> None:
     lang = current_lang()
+
+    render_ai_chat_panel()
 
     render_html('<div class="ts-input-container">')
 
@@ -4009,6 +4151,18 @@ def render_seo_tab() -> None:
                 </div>
 
                 <div class="ts-seo-section">
+                    <h4>📝 SEO description</h4>
+                    <div class="ts-seo-list-item seo" style="white-space: pre-line;">{html_escape(result.seo_description or 'No description generated yet.')}</div>
+                </div>
+
+                <div class="ts-seo-section">
+                    <h4>🏷️ SEO tags</h4>
+                    <div class="ts-seo-grid">
+                        {" ".join(f"<span class='tag'>#{html_escape(tag)}</span>" for tag in result.seo_tags[:12])}
+                    </div>
+                </div>
+
+                <div class="ts-seo-section">
                     <h4>⚡ Clickable titles</h4>
                     <div class="ts-seo-list">
                         {"".join(f"<div class='ts-seo-list-item clickbait'>{html_escape(title)}</div>" for title in result.clickbait_titles)}
@@ -4028,6 +4182,34 @@ def render_seo_tab() -> None:
     render_paywall("generate")
 
 
+def render_thumbnail_prompt_tab() -> None:
+    lang = current_lang()
+    prompt_title = "Thumbnail Prompt Generator" if lang == "en" else "صانع برومبتات الصور المصغرة" if lang == "ar" else "Générateur de prompts de miniature"
+    topic_label = "Video topic" if lang == "en" else "موضوع الفيديو" if lang == "ar" else "Sujet de la vidéo"
+    niche_label = "Niche" if lang == "en" else "المجال" if lang == "ar" else "Niche"
+    generate_btn = "Generate prompt" if lang == "en" else "إنشاء البرومبت" if lang == "ar" else "Générer le prompt"
+    copy_btn = "Copy prompt" if lang == "en" else "نسخ البرومبت" if lang == "ar" else "Copier le prompt"
+
+    st.markdown(f"<div class='ts-section'><h2>{prompt_title}</h2></div>", unsafe_allow_html=True)
+    topic = st.text_input(topic_label, key="thumbnail_topic", value=st.session_state.get("seo_topic", ""), placeholder="e.g. beginner crypto mistakes")
+    niche = st.text_input(niche_label, key="thumbnail_niche", value=st.session_state.get("seo_niche", ""), placeholder="e.g. trading")
+
+    if st.button(generate_btn, type="primary"):
+        prompt = (
+            f"Create a cinematic YouTube thumbnail for a video about '{topic or 'your topic'}' in the niche '{niche or 'your niche'}'. "
+            "Use a high-contrast composition, a large readable title, one clear focal object or face, dramatic lighting, bold background colors, "
+            "clean composition, premium editorial layout, and a strong curiosity hook. Make it visually clean, modern, and optimized for YouTube CTR."
+        )
+        st.session_state["thumbnail_prompt"] = prompt
+
+    generated = st.session_state.get("thumbnail_prompt")
+    if generated:
+        st.code(generated, language="text")
+        if st.button(copy_btn, key="copy_thumbnail_prompt"):
+            st.code(generated, language="text")
+            st.toast("Prompt copied to clipboard within the editor preview.")
+
+
 def main() -> None:
     init_session_state()
     st.set_page_config(
@@ -4045,11 +4227,12 @@ def main() -> None:
 
     render_hero()
 
-    tab_ideas, tab_script, tab_analyze, tab_seo = st.tabs([
+    tab_ideas, tab_script, tab_analyze, tab_seo, tab_thumb = st.tabs([
         "💡 Inspire me with new ideas",
         "📝 Script writer",
         "🎯 Smart analyzer",
         "🚀 SEO optimizer",
+        "🖼️ Thumbnail prompts",
     ])
 
     with tab_ideas:
@@ -4060,6 +4243,8 @@ def main() -> None:
         render_analyze_tab()
     with tab_seo:
         render_seo_tab()
+    with tab_thumb:
+        render_thumbnail_prompt_tab()
 
     render_footer()
 
