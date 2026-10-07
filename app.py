@@ -3506,20 +3506,20 @@ def render_ai_chat_panel() -> None:
 
     input_col, mic_col, send_col = st.columns([7, 1, 1])
     with input_col:
-        user_prompt = st.text_input(
+        st.text_input(
             "AI Copilot",
-            key="copilot_input",
+            key="main_ai_copilot_input",
             help="Describe the topic or the idea you want to generate",
             label_visibility="collapsed",
             placeholder="Type your request...",
         )
     with mic_col:
         if st.button("🎙️", key="copilot_mic", help="Voice input placeholder"):
-            st.session_state["copilot_input"] = "Voice note captured: I want a stronger YouTube idea for my channel."
+            st.session_state["main_ai_copilot_input"] = "Voice note captured: I want a stronger YouTube idea for my channel."
     with send_col:
         if st.button("➤", key="copilot_send", help="Send message"):
-            if st.session_state.get("copilot_input", "").strip():
-                prompt = st.session_state["copilot_input"].strip()
+            if st.session_state.get("main_ai_copilot_input", "").strip():
+                prompt = st.session_state["main_ai_copilot_input"].strip()
                 st.session_state["copilot_messages"].append({"role": "user", "content": prompt})
                 with st.chat_message("user"):
                     st.markdown(prompt)
@@ -3527,7 +3527,7 @@ def render_ai_chat_panel() -> None:
                 st.session_state["copilot_messages"].append({"role": "assistant", "content": reply})
                 with st.chat_message("assistant"):
                     st.markdown(reply)
-                st.session_state["copilot_input"] = ""
+                st.session_state["main_ai_copilot_input"] = ""
     st.markdown('</div>', unsafe_allow_html=True)
 
 
@@ -3753,8 +3753,6 @@ def render_footer() -> None:
 
 def render_generator_tab() -> None:
     lang = current_lang()
-
-    render_ai_chat_panel()
 
     render_html('<div class="ts-input-container">')
 
