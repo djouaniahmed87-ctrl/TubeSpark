@@ -2005,6 +2005,11 @@ __FONT_IMPORT__
 }
 
 html, body, .stApp {
+    direction: rtl !important;
+    text-align: right !important;
+}
+
+html, body, .stApp {
     direction: __DIRECTION__;
     text-align: __ALIGN__;
     background: var(--bg-gradient);
@@ -4361,7 +4366,7 @@ def render_manual_workspace() -> None:
 
 
 def render_workspace_layout() -> None:
-    """Modern 30/70 split with tabs at the top of the workspace and the chat panel fixed on the right."""
+    """Strict 70/30 split: workspace on the left, chat panel on the right."""
     col_workspace, col_chat = st.columns([7, 3])
 
     with col_workspace:
