@@ -2000,6 +2000,8 @@ __FONT_IMPORT__
 
 * {
     font-family: __FONT__;
+    direction: rtl !important;
+    text-align: right !important;
 }
 
 html, body, .stApp {
@@ -3269,6 +3271,11 @@ def inject_styles() -> None:
     render_html(
         """
         <style>
+        * {
+            direction: rtl !important;
+            text-align: right !important;
+        }
+
         .stApp {
             background: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F172A 100%) !important;
             background-attachment: fixed !important;
@@ -3291,6 +3298,70 @@ def inject_styles() -> None:
         .stButton > button {
             background: linear-gradient(135deg, #8B5CF6, #EC4899) !important;
             color: white !important;
+            font-size: 0.95rem !important;
+            font-weight: 700 !important;
+            border-radius: 14px !important;
+            min-height: 46px !important;
+            padding: 0.7rem 1rem !important;
+            width: 100% !important;
+            text-align: center !important;
+        }
+
+        .ts-side-panel {
+            background: rgba(15, 23, 42, 0.74);
+            border: 1px solid rgba(148, 163, 184, 0.22);
+            border-radius: 22px;
+            padding: 1rem;
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.28);
+            backdrop-filter: blur(12px);
+        }
+
+        .ts-chat-shell {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .ts-workspace-panel {
+            background: rgba(15, 23, 42, 0.45);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            border-radius: 22px;
+            padding: 1rem 1.1rem;
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
+            overflow: hidden;
+        }
+
+        .ts-divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(167, 139, 250, 0.6), transparent);
+            margin: 1rem 0 1.3rem;
+        }
+
+        .ts-badges-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin: 0.5rem 0 1rem;
+        }
+
+        .ts-badge-pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.35rem 0.7rem;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .ts-badge-pill.seo { background: rgba(96, 165, 250, 0.16); color: #bfdbfe; }
+        .ts-badge-pill.ctr { background: rgba(52, 211, 153, 0.13); color: #bbf7d0; }
+        .ts-badge-pill.comp { background: rgba(250, 204, 21, 0.12); color: #fde68a; }
+
+        .ts-auto-report {
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
         }
         </style>
         """
@@ -3497,27 +3568,27 @@ def _copilot_reply(prompt: str, lang: str) -> str:
 def render_ai_chat_panel() -> None:
     """Fixed chat panel on the right side of the micro-SaaS layout."""
     st.session_state.setdefault("copilot_messages", [
-        {"role": "assistant", "content": "Hello! Tell me your topic or idea and I’ll sync it into the workspace."}
+        {"role": "assistant", "content": "مرحباً! أخبرني عن موضوعك أو فكرتك وسأقوم بمزامنتها في مساحة العمل."}
     ])
     st.markdown('<div class="ts-chat-shell">', unsafe_allow_html=True)
     for message in st.session_state["copilot_messages"]:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    input_col, mic_col, send_col = st.columns([7, 1, 1])
+    input_col, mic_col, send_col = st.columns([7, 2, 3])
     with input_col:
         st.text_input(
             "AI Copilot",
             key="main_ai_copilot_input",
-            help="Describe the topic or the idea you want to generate",
+            help="اكتب فكرة أو موضوع الفيديو الذي تريد إنشاؤه",
             label_visibility="collapsed",
-            placeholder="Type your request...",
+            placeholder="اكتب طلبك هنا...",
         )
     with mic_col:
-        if st.button("🎙️", key="copilot_mic", help="Voice input placeholder"):
-            st.session_state["main_ai_copilot_input"] = "Voice note captured: I want a stronger YouTube idea for my channel."
+        if st.button("🎤", key="copilot_mic", help="تسجيل صوتي", use_container_width=True):
+            st.session_state["main_ai_copilot_input"] = "ملاحظة صوتية: أريد فكرة أقوى لقناة يوتيوب." 
     with send_col:
-        if st.button("➤", key="copilot_send", help="Send message"):
+        if st.button("🚀 إرسال", key="copilot_send", help="إرسال الرسالة", use_container_width=True):
             if st.session_state.get("main_ai_copilot_input", "").strip():
                 prompt = st.session_state["main_ai_copilot_input"].strip()
                 st.session_state["copilot_messages"].append({"role": "user", "content": prompt})
@@ -4290,20 +4361,25 @@ def render_manual_workspace() -> None:
 
 
 def render_workspace_layout() -> None:
-    """Modern 30/70 split with a fixed Copilot panel on the right and adaptive workspace on the left."""
-    left_col, right_col = st.columns([7, 3])
+    """Modern 30/70 split with tabs at the top of the workspace and the chat panel fixed on the right."""
+    col_workspace, col_chat = st.columns([7, 3])
 
-    with right_col:
-        st.markdown('<div class="ts-side-panel">', unsafe_allow_html=True)
-        render_ai_chat_panel()
+    with col_workspace:
+        st.markdown('<div class="ts-workspace-panel">', unsafe_allow_html=True)
+        tabs = st.tabs(["💡 الأفكار", "📝 السكريبت", "🚀 SEO", "🖼️ البرومبتات"])
+        with tabs[0]:
+            render_generator_tab()
+        with tabs[1]:
+            render_script_tab()
+        with tabs[2]:
+            render_seo_tab()
+        with tabs[3]:
+            render_thumbnail_prompt_tab()
         st.markdown('</div>', unsafe_allow_html=True)
 
-    with left_col:
-        st.markdown('<div class="ts-workspace-panel">', unsafe_allow_html=True)
-        if st.session_state.get("chat_report"):
-            render_auto_report()
-            st.markdown('<div class="ts-divider"></div>', unsafe_allow_html=True)
-        render_manual_workspace()
+    with col_chat:
+        st.markdown('<div class="ts-side-panel">', unsafe_allow_html=True)
+        render_ai_chat_panel()
         st.markdown('</div>', unsafe_allow_html=True)
 
 
@@ -4317,73 +4393,8 @@ def main() -> None:
 
     inject_custom_header()
     inject_styles()
-    st.markdown(
-        """
-        <style>
-        .ts-side-panel {
-            position: sticky;
-            top: 88px;
-            background: rgba(15, 23, 42, 0.72);
-            border: 1px solid rgba(148, 163, 184, 0.22);
-            border-radius: 22px;
-            padding: 1rem;
-            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.28);
-            backdrop-filter: blur(12px);
-        }
-        .ts-chat-shell {
-            display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
-        }
-        .ts-workspace-panel {
-            background: rgba(15, 23, 42, 0.45);
-            border: 1px solid rgba(148, 163, 184, 0.18);
-            border-radius: 22px;
-            padding: 1rem 1.1rem;
-            min-height: 70vh;
-            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
-        }
-        .ts-divider {
-            height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(167, 139, 250, 0.6), transparent);
-            margin: 1rem 0 1.3rem;
-        }
-        .ts-badges-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-            margin: 0.5rem 0 1rem;
-        }
-        .ts-badge-pill {
-            display: inline-flex;
-            align-items: center;
-            padding: 0.35rem 0.7rem;
-            border-radius: 999px;
-            font-size: 0.72rem;
-            font-weight: 700;
-            border: 1px solid rgba(255,255,255,0.1);
-        }
-        .ts-badge-pill.seo { background: rgba(96, 165, 250, 0.16); color: #bfdbfe; }
-        .ts-badge-pill.ctr { background: rgba(52, 211, 153, 0.13); color: #bbf7d0; }
-        .ts-badge-pill.comp { background: rgba(250, 204, 21, 0.12); color: #fde68a; }
-        .ts-auto-report {
-            display: flex;
-            flex-direction: column;
-            gap: 0.8rem;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
 
-    top_row = st.columns([7, 3])
-    with top_row[0]:
-        render_html('<div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">')
-        render_language_switcher()
-        st.markdown('</div>', unsafe_allow_html=True)
-    with top_row[1]:
-        st.empty()
-
+    render_language_switcher()
     render_hero()
     render_workspace_layout()
     render_footer()
