@@ -3371,6 +3371,20 @@ def render_social_proof() -> None:
     )
 
 
+def render_metric_badges(*, seo_score: int = 85, ctr: str = "High", competition: str = "Medium") -> None:
+    """Shows compact quality badges used alongside generated ideas and titles."""
+    st.markdown(
+        f"""
+        <div class="ts-badges-row">
+            <span class="ts-badge-pill seo">SEO: {seo_score}/100</span>
+            <span class="ts-badge-pill ctr">CTR: {ctr}</span>
+            <span class="ts-badge-pill comp">Competition: {competition}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def _sync_chat_state(payload: dict[str, str]) -> None:
     """Transfers the structured Copilot output into the main session state."""
     if not payload:
@@ -3439,6 +3453,14 @@ def _copilot_reply(prompt: str, lang: str) -> str:
                     "summary": _model_text(payload.get("summary"), 280),
                 }
                 _sync_chat_state(data)
+                st.session_state["chat_report"] = {
+                    "summary": data.get("summary") or "AI Copilot synced the request into the workspace.",
+                    "idea": data.get("niche") or "General",
+                    "script": data.get("script_idea") or cleaned,
+                    "seo_topic": data.get("seo_topic") or cleaned,
+                    "seo_niche": data.get("seo_niche") or data.get("niche") or "General",
+                    "thumbnail_prompt": f"Create a cinematic YouTube thumbnail for '{data.get('seo_topic') or cleaned}' in the niche '{data.get('seo_niche') or data.get('niche') or 'general'}'."
+                }
                 return data.get("summary") or "I’ve updated the main fields based on your request."
         except Exception:
             pass
@@ -3461,34 +3483,52 @@ def _copilot_reply(prompt: str, lang: str) -> str:
         "summary": summary,
     }
     _sync_chat_state(data)
+    st.session_state["chat_report"] = {
+        "summary": summary,
+        "idea": niche,
+        "script": cleaned,
+        "seo_topic": topic,
+        "seo_niche": niche,
+        "thumbnail_prompt": f"Create a cinematic YouTube thumbnail for '{topic}' in the niche '{niche}'."
+    }
     return summary
 
 
 def render_ai_chat_panel() -> None:
-    """A lightweight Copilot-style assistant that feeds the main app state."""
+    """Fixed chat panel on the right side of the micro-SaaS layout."""
     st.session_state.setdefault("copilot_messages", [
-        {
-            "role": "assistant",
-            "content": "Hello! Tell me your topic or idea and I’ll sync it into the generator, script, and SEO sections.",
-        }
+        {"role": "assistant", "content": "Hello! Tell me your topic or idea and I’ll sync it into the workspace."}
     ])
+    st.markdown('<div class="ts-chat-shell">', unsafe_allow_html=True)
+    for message in st.session_state["copilot_messages"]:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-    chat_box = st.container()
-    with chat_box:
-        for message in st.session_state["copilot_messages"]:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
-
-    user_prompt = st.chat_input("Ask the Copilot about your next video...")
-    if user_prompt:
-        st.session_state["copilot_messages"].append({"role": "user", "content": user_prompt})
-        with st.chat_message("user"):
-            st.markdown(user_prompt)
-
-        reply = _copilot_reply(user_prompt, current_lang())
-        st.session_state["copilot_messages"].append({"role": "assistant", "content": reply})
-        with st.chat_message("assistant"):
-            st.markdown(reply)
+    input_col, mic_col, send_col = st.columns([7, 1, 1])
+    with input_col:
+        user_prompt = st.text_input(
+            "AI Copilot",
+            key="copilot_input",
+            help="Describe the topic or the idea you want to generate",
+            label_visibility="collapsed",
+            placeholder="Type your request...",
+        )
+    with mic_col:
+        if st.button("🎙️", key="copilot_mic", help="Voice input placeholder"):
+            st.session_state["copilot_input"] = "Voice note captured: I want a stronger YouTube idea for my channel."
+    with send_col:
+        if st.button("➤", key="copilot_send", help="Send message"):
+            if st.session_state.get("copilot_input", "").strip():
+                prompt = st.session_state["copilot_input"].strip()
+                st.session_state["copilot_messages"].append({"role": "user", "content": prompt})
+                with st.chat_message("user"):
+                    st.markdown(prompt)
+                reply = _copilot_reply(prompt, current_lang())
+                st.session_state["copilot_messages"].append({"role": "assistant", "content": reply})
+                with st.chat_message("assistant"):
+                    st.markdown(reply)
+                st.session_state["copilot_input"] = ""
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 def render_idea_cards(ideas: list[Idea], niche: str, *, platform: str) -> None:
@@ -4210,6 +4250,65 @@ def render_thumbnail_prompt_tab() -> None:
             st.toast("Prompt copied to clipboard within the editor preview.")
 
 
+def render_auto_report() -> None:
+    """Displays the auto-generated workspace report after a Copilot prompt."""
+    report = st.session_state.get("chat_report")
+    if not report:
+        return
+
+    st.markdown("<div class='ts-auto-report'>", unsafe_allow_html=True)
+    st.subheader("AI Copilot Workspace Summary")
+    st.markdown(f"**{report.get('summary', 'Updated from the Copilot conversation.')}**")
+
+    st.markdown("### 1) Idea")
+    st.info(report.get("idea") or "General idea")
+    render_metric_badges(seo_score=89, ctr="High", competition="Medium")
+
+    st.markdown("### 2) Script")
+    st.code(report.get("script") or "No script generated yet.", language="text")
+
+    st.markdown("### 3) SEO")
+    st.code(
+        f"Topic: {report.get('seo_topic') or 'Untitled'}\nNiche: {report.get('seo_niche') or 'General'}",
+        language="text",
+    )
+
+    st.markdown("### 4) Thumbnail Prompt")
+    st.code(report.get("thumbnail_prompt") or "No thumbnail prompt generated yet.", language="text")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_manual_workspace() -> None:
+    """Renders the standard tab-based workspace for manual editing."""
+    tabs = st.tabs(["Ideas", "Script", "SEO", "Thumbnail"])
+    with tabs[0]:
+        render_generator_tab()
+    with tabs[1]:
+        render_script_tab()
+    with tabs[2]:
+        render_seo_tab()
+    with tabs[3]:
+        render_thumbnail_prompt_tab()
+
+
+def render_workspace_layout() -> None:
+    """Modern 30/70 split with a fixed Copilot panel on the right and adaptive workspace on the left."""
+    left_col, right_col = st.columns([7, 3])
+
+    with right_col:
+        st.markdown('<div class="ts-side-panel">', unsafe_allow_html=True)
+        render_ai_chat_panel()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with left_col:
+        st.markdown('<div class="ts-workspace-panel">', unsafe_allow_html=True)
+        if st.session_state.get("chat_report"):
+            render_auto_report()
+            st.markdown('<div class="ts-divider"></div>', unsafe_allow_html=True)
+        render_manual_workspace()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+
 def main() -> None:
     init_session_state()
     st.set_page_config(
@@ -4220,32 +4319,75 @@ def main() -> None:
 
     inject_custom_header()
     inject_styles()
+    st.markdown(
+        """
+        <style>
+        .ts-side-panel {
+            position: sticky;
+            top: 88px;
+            background: rgba(15, 23, 42, 0.72);
+            border: 1px solid rgba(148, 163, 184, 0.22);
+            border-radius: 22px;
+            padding: 1rem;
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.28);
+            backdrop-filter: blur(12px);
+        }
+        .ts-chat-shell {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+        .ts-workspace-panel {
+            background: rgba(15, 23, 42, 0.45);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            border-radius: 22px;
+            padding: 1rem 1.1rem;
+            min-height: 70vh;
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
+        }
+        .ts-divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(167, 139, 250, 0.6), transparent);
+            margin: 1rem 0 1.3rem;
+        }
+        .ts-badges-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin: 0.5rem 0 1rem;
+        }
+        .ts-badge-pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.35rem 0.7rem;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .ts-badge-pill.seo { background: rgba(96, 165, 250, 0.16); color: #bfdbfe; }
+        .ts-badge-pill.ctr { background: rgba(52, 211, 153, 0.13); color: #bbf7d0; }
+        .ts-badge-pill.comp { background: rgba(250, 204, 21, 0.12); color: #fde68a; }
+        .ts-auto-report {
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    render_html('<div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">')
-    render_language_switcher()
-    st.markdown('</div>', unsafe_allow_html=True)
+    top_row = st.columns([7, 3])
+    with top_row[0]:
+        render_html('<div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">')
+        render_language_switcher()
+        st.markdown('</div>', unsafe_allow_html=True)
+    with top_row[1]:
+        st.empty()
 
     render_hero()
-
-    tab_ideas, tab_script, tab_analyze, tab_seo, tab_thumb = st.tabs([
-        "💡 Inspire me with new ideas",
-        "📝 Script writer",
-        "🎯 Smart analyzer",
-        "🚀 SEO optimizer",
-        "🖼️ Thumbnail prompts",
-    ])
-
-    with tab_ideas:
-        render_generator_tab()
-    with tab_script:
-        render_script_tab()
-    with tab_analyze:
-        render_analyze_tab()
-    with tab_seo:
-        render_seo_tab()
-    with tab_thumb:
-        render_thumbnail_prompt_tab()
-
+    render_workspace_layout()
     render_footer()
 
 
