@@ -4183,7 +4183,7 @@ def render_thumbnail_prompt_tab() -> None:
 
 
 def render_workspace_layout() -> None:
-    """Hero-left, workspace-right split layout matching a SaaS landing page composition."""
+    """Landing page with a polished SaaS hero and direct links to each real tool page."""
     st.markdown('<div class="ts-shell">', unsafe_allow_html=True)
     hero_col, tool_col = st.columns([1.18, 1.02], gap="large")
 
@@ -4191,19 +4191,39 @@ def render_workspace_layout() -> None:
         render_hero()
 
     with tool_col:
-        st.markdown('<div class="ts-tool-surface" id="workspace">', unsafe_allow_html=True)
-        tabs = st.tabs(["💡 الأفكار", "📝 السكريبت", "🚀 SEO", "🖼️ البرومبتات"])
-        with tabs[0]:
-            render_generator_tab()
-        with tabs[1]:
-            render_script_tab()
-        with tabs[2]:
-            render_seo_tab()
-        with tabs[3]:
-            render_thumbnail_prompt_tab()
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div class="ts-tool-surface" id="workspace">
+                <div class="ts-card" style="margin: 1rem; background: rgba(15,23,42,0.68); border: 1px solid rgba(148,163,184,0.16);">
+                    <div class="ts-card-kicker">Workspace</div>
+                    <h3>Choose a tool</h3>
+                    <p>Jump into the generator, script writer, SEO optimizer, or thumbnail prompt builder.</p>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        nav_cols = st.columns(2)
+        with nav_cols[0]:
+            st.page_link("pages/1_💡_Ideas_Generator.py", label="💡 Ideas Generator", icon="💡")
+            st.page_link("pages/3_🔍_SEO_Optimizer.py", label="🔍 SEO Optimizer", icon="🔍")
+        with nav_cols[1]:
+            st.page_link("pages/2_📝_Script_Writer.py", label="📝 Script Writer", icon="📝")
+            st.page_link("pages/4_🎨_Thumbnail_Prompts.py", label="🎨 Thumbnail Prompts", icon="🎨")
 
     st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown(
+        """
+        <div class="ts-shell">
+            <div class="ts-card">
+                <div class="ts-card-kicker">Why creators use TubeSpark</div>
+                <h3>From niche research to title optimization and AI writing.</h3>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def main() -> None:
