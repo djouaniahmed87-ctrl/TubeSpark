@@ -2050,7 +2050,6 @@ def render_artifact_card(title: str, body: str, *, badge: str = "Artifact", meta
             <div class="artifact-body">{html_escape(body)}</div>
         </div>
         """,
-        unsafe_allow_html=True,
     )
 
 
@@ -4905,7 +4904,6 @@ def render_idea_cards(ideas: list[Idea], niche: str, *, platform: str) -> None:
                         {keywords_html}
                     </div>
                     """,
-                    unsafe_allow_html=True,
                 )
                 action_cols = st.columns(4)
                 with action_cols[0]:
