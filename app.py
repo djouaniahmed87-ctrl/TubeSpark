@@ -2003,6 +2003,38 @@ def _render_chip_row(values: tuple[str, ...], *, limit: int = 8) -> str:
     return f'<div class="tags">{chips}</div>'
 
 
+def _script_idea_seed(title: str, project_idea: str, topic: str) -> str:
+    return title.strip() or project_idea.strip() or topic.strip()
+
+
+def _seo_generation_inputs(
+    *,
+    title: str,
+    description: str,
+    niche: str,
+    primary_keyword: str,
+    audience: str,
+) -> tuple[str, str]:
+    topic = title.strip() or niche.strip() or primary_keyword.strip() or description.strip() or "topic"
+    generation_context = [
+        f"Niche / category: {niche.strip()}" if niche.strip() else "",
+        f"Existing description: {description.strip()}" if description.strip() else "",
+        f"Primary keyword: {primary_keyword.strip()}" if primary_keyword.strip() else "",
+        f"Target audience: {audience.strip()}" if audience.strip() else "",
+    ]
+    return topic, "\n".join(part for part in generation_context if part) or "content"
+
+
+def _render_seo_title_suggestions(data: SEOData) -> None:
+    for heading, titles in (
+        ("SEO title suggestions", data.seo_titles),
+        ("Curiosity-driven title suggestions", data.clickbait_titles),
+    ):
+        if titles:
+            st.markdown(f"#### {heading}")
+            st.markdown("\n".join(f"- {html_escape(title)}" for title in titles))
+
+
 def render_artifact_card(title: str, body: str, *, badge: str = "Artifact", meta: str = "") -> None:
     """Shared visual wrapper for AI-generated output so each result feels like a product artifact."""
     if not body:
@@ -4789,33 +4821,38 @@ def render_ai_chat_panel() -> None:
                 with st.chat_message("assistant"):
                     st.markdown(reply)
                 st.session_state["last_chat_reply"] = reply
+                st.session_state["show_chat_reply_copy"] = False
                 st.session_state["main_ai_copilot_input"] = ""
-                render_artifact_card(
-                    "Project artifact",
-                    "Use the shared project context or send this output into the relevant workspace.",
-                    badge="Project artifact",
-                    meta="Context-aware output",
-                )
-                c1, c2, c3, c4 = st.columns(4)
-                with c1:
-                    if st.button("Use in Idea Generator", key="chat_use_content_studio", use_container_width=True):
-                        st.session_state["active_workspace"] = "Idea Generator"
-                        update_project_context(topic=ctx.get("topic") or ctx.get("idea") or ctx.get("project_idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
-                        st.rerun()
-                with c2:
-                    if st.button("Open Idea Evaluator", key="chat_send_seo", use_container_width=True):
-                        st.session_state["active_workspace"] = "Idea Evaluator"
-                        update_project_context(topic=ctx.get("topic") or ctx.get("idea") or ctx.get("project_idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
-                        st.rerun()
-                with c3:
-                    if st.button("Send to Script Writer", key="chat_send_visual", use_container_width=True):
-                        st.session_state["active_workspace"] = "Script Writer"
-                        update_project_context(topic=ctx.get("topic") or ctx.get("idea") or ctx.get("project_idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
-                        st.rerun()
-                with c4:
-                    if st.button("Copy", key="chat_copy_reply", use_container_width=True):
-                        render_copy_button(reply)
     st.markdown('</div>', unsafe_allow_html=True)
+
+    if st.session_state.get("last_chat_reply"):
+        render_artifact_card(
+            "Project artifact",
+            "Use the shared project context or send this output into the relevant workspace.",
+            badge="Project artifact",
+            meta="Context-aware output",
+        )
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            if st.button("Use in Idea Generator", key="chat_use_content_studio", use_container_width=True):
+                st.session_state["active_workspace"] = "Idea Generator"
+                update_project_context(topic=ctx.get("topic") or ctx.get("idea") or ctx.get("project_idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
+                st.rerun()
+        with c2:
+            if st.button("Open Idea Evaluator", key="chat_send_seo", use_container_width=True):
+                st.session_state["active_workspace"] = "Idea Evaluator"
+                update_project_context(topic=ctx.get("topic") or ctx.get("idea") or ctx.get("project_idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
+                st.rerun()
+        with c3:
+            if st.button("Send to Script Writer", key="chat_send_visual", use_container_width=True):
+                st.session_state["active_workspace"] = "Script Writer"
+                update_project_context(topic=ctx.get("topic") or ctx.get("idea") or ctx.get("project_idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
+                st.rerun()
+        with c4:
+            if st.button("Copy", key="chat_copy_reply", use_container_width=True):
+                st.session_state["show_chat_reply_copy"] = True
+        if st.session_state.get("show_chat_reply_copy"):
+            render_copy_button(st.session_state["last_chat_reply"])
 
 
 def render_idea_cards(ideas: list[Idea], niche: str, *, platform: str) -> None:
@@ -5628,8 +5665,12 @@ def render_script_writer_workspace() -> None:
     additional_context = st.text_area("Additional context", value="", key="script_writer_context", height=90)
 
     if st.button("Generate Script", type="primary", key="content_script_generate"):
-        if topic_input.strip() and (title_input.strip() or st.session_state.get("project_context", {}).get("idea") or "").strip():
-            idea_seed = title_input.strip() or st.session_state.get("project_context", {}).get("idea") or topic_input.strip()
+        idea_seed = _script_idea_seed(
+            title_input,
+            st.session_state.get("project_context", {}).get("idea") or "",
+            topic_input,
+        )
+        if topic_input.strip():
             context_parts = [idea_seed]
             if key_points.strip():
                 context_parts.append(f"Key points: {key_points.strip()}")
@@ -5662,7 +5703,7 @@ def render_script_writer_workspace() -> None:
                 )
                 st.success("Script generated and saved.")
         else:
-            st.warning("Please provide both a topic and a working idea or title.")
+            st.warning("Please provide a topic before generating.")
     result = st.session_state.get("script_result")
     if result:
         st.markdown(f"### {html_escape(result.title)}", unsafe_allow_html=True)
@@ -5834,6 +5875,7 @@ def render_seo_workspace() -> None:
             if data.seo_tags:
                 st.markdown("#### Keywords")
                 st.markdown(_render_chip_row(data.seo_tags, limit=12), unsafe_allow_html=True)
+            _render_seo_title_suggestions(data)
             if data.chapters:
                 st.markdown("#### Chapters")
                 for idx, chapter in enumerate(data.chapters[:6], start=1):
@@ -5878,9 +5920,16 @@ def render_seo_workspace() -> None:
         seo_keyword = st.text_input("Primary keyword", value=(st.session_state.get("project_context", {}).get("keywords") or [""])[0] if st.session_state.get("project_context", {}).get("keywords") else "", key="seo_optimizer_keyword")
         seo_audience = st.text_input("Audience", value=st.session_state.get("project_context", {}).get("audience") or "", key="seo_optimizer_audience")
         if st.button("Optimize SEO", type="primary", key="seo_optimizer_button"):
-            if seo_title.strip() or seo_description.strip() or seo_niche.strip():
+            if any(value.strip() for value in (seo_title, seo_description, seo_niche, seo_keyword)):
                 with st.spinner("Optimizing SEO..."):
-                    result = _seo_from_groq(seo_niche.strip() or seo_title.strip() or "topic", seo_niche.strip() or "content", lang=current_lang())
+                    seo_topic, seo_context = _seo_generation_inputs(
+                        title=seo_title,
+                        description=seo_description,
+                        niche=seo_niche,
+                        primary_keyword=seo_keyword,
+                        audience=seo_audience,
+                    )
+                    result = _seo_from_groq(seo_topic, seo_context, lang=current_lang())
                     st.session_state["seo_result"] = result
                     update_project_context(seo=result.seo_description, keywords=list(result.seo_tags), search_tags=list(result.seo_tags), selected_title=seo_title.strip() or st.session_state.get("project_context", {}).get("selected_title", ""), content_type="seo", platform=project_platform)
                     st.success("SEO optimization produced and saved.")
@@ -5889,6 +5938,7 @@ def render_seo_workspace() -> None:
         if st.session_state.get("seo_result"):
             data = st.session_state["seo_result"]
             render_artifact_card("Optimized SEO", data.seo_description, badge="SEO", meta="Optimized")
+            _render_seo_title_suggestions(data)
             if data.seo_tags:
                 st.markdown(_render_chip_row(data.seo_tags, limit=12), unsafe_allow_html=True)
 
@@ -6078,6 +6128,7 @@ def render_app_shell() -> None:
                 render_seo_workspace()
             elif workspace == "Visual Prompt Studio":
                 render_visual_prompt_studio_workspace()
+    render_ai_error()
 
 
 def render_workspace_layout() -> None:
