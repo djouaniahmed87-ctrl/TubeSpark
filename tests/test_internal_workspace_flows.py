@@ -66,8 +66,9 @@ class InternalWorkspaceFlowTests(unittest.TestCase):
         self.assertEqual(generate_ideas.call_args.kwargs["audience"], "New baristas")
         self.assertEqual(generate_ideas.call_args.kwargs["lang"], "fr")
         self.assertEqual(generate_ideas.call_args.kwargs["duration"], "15min+")
-        self.assertIn("Podcast", generate_ideas.call_args.kwargs["vibe"])
-        self.assertIn("Compare affordable grinders", generate_ideas.call_args.kwargs["vibe"])
+        self.assertEqual(generate_ideas.call_args.kwargs["content_type"], "Podcast")
+        self.assertEqual(generate_ideas.call_args.kwargs["content_format"], "Podcast")
+        self.assertEqual(generate_ideas.call_args.kwargs["additional_context"], "Compare affordable grinders")
 
     def test_evaluator_forwards_platform_audience_niche_type_and_title(self):
         state = {"lang": "ar"}

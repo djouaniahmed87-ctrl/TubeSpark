@@ -437,6 +437,31 @@ I18N: dict[str, dict[str, str]] = {
         "ar": "نسخ النتيجة",
         "fr": "Copier le résultat",
     },
+    "chat.facts": {
+        "en": "Facts from your input",
+        "ar": "معلومات من مدخلاتك",
+        "fr": "Faits issus de ton entrée",
+    },
+    "chat.inferences": {
+        "en": "Inferences",
+        "ar": "استنتاجات",
+        "fr": "Inférences",
+    },
+    "chat.assumptions": {
+        "en": "Assumptions",
+        "ar": "افتراضات",
+        "fr": "Hypothèses",
+    },
+    "chat.source_notice": {
+        "en": "This response used a local fallback or no external retrieval; it is not verified research.",
+        "ar": "استخدمت هذه الاستجابة مسارًا محليًا احتياطيًا أو لم تستخدم استرجاعًا خارجيًا؛ وهي ليست بحثًا موثقًا.",
+        "fr": "Cette réponse utilise un mécanisme local ou aucune récupération externe ; elle ne constitue pas une recherche vérifiée.",
+    },
+    "chat.structured_artifacts": {
+        "en": "Structured artifacts",
+        "ar": "المخرجات المنظمة",
+        "fr": "Résultats structurés",
+    },
     "chat.voice_unavailable": {
         "en": "Voice input is unavailable in this chat. Use the text field to send your request.",
         "ar": "الإدخال الصوتي غير متاح في هذه المحادثة. استخدم حقل النص لإرسال طلبك.",
@@ -466,6 +491,11 @@ I18N: dict[str, dict[str, str]] = {
         "en": "Visual result",
         "ar": "النتيجة المرئية",
         "fr": "Résultat visuel",
+    },
+    "result.score": {
+        "en": "Score",
+        "ar": "الدرجة",
+        "fr": "Note",
     },
     "result.description": {
         "en": "Description",
@@ -1240,6 +1270,81 @@ I18N: dict[str, dict[str, str]] = {
         "en": "The idea is generic and names no audience or channel. Tie it to a specific niche or audience.",
         "ar": "الفكرة عامة ولا تذكر جمهوراً أو قناة محددة. اربطها بمجال أو جمهور بعينه.",
         "fr": "L'idée est générique et ne cite ni audience ni chaîne. Lie-la à un thème ou une audience précise.",
+    },
+    "eval.criteria": {
+        "en": "Criterion breakdown",
+        "ar": "تفصيل المعايير",
+        "fr": "Détail des critères",
+    },
+    "eval.original": {
+        "en": "Original",
+        "ar": "الأصلية",
+        "fr": "Originale",
+    },
+    "eval.revised": {
+        "en": "Revised",
+        "ar": "المنقحة",
+        "fr": "Révisée",
+    },
+    "eval.strengths": {
+        "en": "Supported strengths",
+        "ar": "نقاط القوة المدعومة",
+        "fr": "Points forts étayés",
+    },
+    "eval.weaknesses": {
+        "en": "Gaps in the supplied idea",
+        "ar": "الثغرات في الفكرة المقدمة",
+        "fr": "Lacunes de l'idée fournie",
+    },
+    "eval.opportunity": {
+        "en": "Improvement opportunity",
+        "ar": "فرصة للتحسين",
+        "fr": "Possibilité d'amélioration",
+    },
+    "eval.heuristic_notice": {
+        "en": "Offline heuristic estimate — not AI reasoning or external research.",
+        "ar": "تقدير إرشادي دون اتصال — ليس استدلالًا من الذكاء الاصطناعي أو بحثًا خارجيًا.",
+        "fr": "Estimation heuristique hors ligne — ni raisonnement IA ni recherche externe.",
+    },
+    "eval.criterion.hook_strength": {
+        "en": "Hook strength",
+        "ar": "قوة الخطاف",
+        "fr": "Force de l'accroche",
+    },
+    "eval.criterion.specificity": {
+        "en": "Specificity",
+        "ar": "التحديد",
+        "fr": "Précision",
+    },
+    "eval.criterion.curiosity": {
+        "en": "Curiosity",
+        "ar": "الفضول",
+        "fr": "Curiosité",
+    },
+    "eval.criterion.audience_fit": {
+        "en": "Audience fit",
+        "ar": "ملاءمة الجمهور",
+        "fr": "Adéquation au public",
+    },
+    "eval.criterion.value_payoff": {
+        "en": "Value / payoff",
+        "ar": "القيمة / العائد",
+        "fr": "Valeur / bénéfice",
+    },
+    "eval.criterion.differentiation": {
+        "en": "Differentiation",
+        "ar": "التميّز",
+        "fr": "Différenciation",
+    },
+    "eval.criterion.platform_fit": {
+        "en": "Platform fit",
+        "ar": "ملاءمة المنصة",
+        "fr": "Adéquation à la plateforme",
+    },
+    "eval.criterion.production_feasibility": {
+        "en": "Production feasibility",
+        "ar": "قابلية الإنتاج",
+        "fr": "Faisabilité de production",
     },
     # ---- clipboard -----------------------------------------------------------------
     "copy.idea": {

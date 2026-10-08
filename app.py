@@ -506,7 +506,7 @@ def _idea_system_prompt(count: int, *, lang: str, short_form: bool, duration: st
         if short_form
         else f"Each idea is a standalone video matching the selected runtime of {duration}, with room for story, examples and a payoff at the end."
     )
-    return f"""You are an elite viral content strategist with 15+ years of experience across
+    return f"""    You are a content strategist for
 YouTube, TikTok, Instagram Reels, and Facebook. You specialize in creating high-retention,
 algorithm-friendly video concepts that convert viewers into subscribers.
 
@@ -533,8 +533,9 @@ DEPTH
 - Prefer a real number, a real tool, a real mistake or a real comparison over a general
   claim. Give the specifics a viewer would screenshot.
 - The hook must open on the payoff or the tension, never on an introduction.
-- Tags must be trending in the niche with proven engagement.
-- Keywords must have actual search volume potential.
+- Suggest relevant tags and keywords, but do not claim they are trending or have verified search volume.
+- Never invent statistics, sources, current trends, search volumes, or performance outcomes.
+- When current external evidence is needed, state that it is unavailable; no retrieval source is connected.
 
 RULES
 - Return exactly {count} ideas, each one a single shootable video.
@@ -560,6 +561,10 @@ def _idea_user_prompt(
     lang: str,
     variant: int,
     duration: str = "8-10min",
+    topic: str = "",
+    content_type: str = "",
+    content_format: str = "",
+    additional_context: str = "",
 ) -> str:
     freshness = (
         "These angles were already suggested, so pick clearly different mechanisms."
@@ -567,12 +572,16 @@ def _idea_user_prompt(
         else "Make the ideas use clearly different angles and different opening shots."
     )
     return f"""BRIEF
-- Topic / niche: {niche}
+    - Topic: {topic or niche}
+    - Channel / content niche: {niche}
 - Platform: {option_label("platform", platform, lang)}
 - Video format: {t_for(lang, "gen.mode_short") if is_short_form(platform) else t_for(lang, "gen.mode_long")}
 - Target duration: {duration}
+- Content type: {content_type or 'not specified'}
+- Output format: {content_format or 'not specified'}
 - Tone and angle: {option_label("vibe", vibe, lang)}
 - Target audience: {option_label("audience", audience, lang)}
+- Additional user context: {additional_context or 'none'}
 - Number of ideas: {count}
 - {freshness}
 
@@ -583,44 +592,42 @@ prompt."""
 def _evaluation_system_prompt(lang: str) -> str:
     rules = AI_LANGUAGE_RULES.get(lang, AI_LANGUAGE_RULES[DEFAULT_LANGUAGE])
     return f"""You are an expert viral content strategist. You review one video idea from a
-creator and tell them exactly what to change so the video performs.
+creator and assess its creative and production qualities.
 
 You always answer with valid JSON and nothing else: no markdown, no code fences, no
 explanation before or after the object.
 
 FIELDS
-- "score": integer 0-100, how strong the idea is as written. Judge only the idea in front of
-you: the strength of the first two seconds, the curiosity gap, the specificity, how clear
-the target audience is, and how easy it is to produce.
-
-  Use this rubric:
-  - 90-95: exceptional. A specific hook, a concrete payoff and a clear audience, already
-    structured and shootable.
-  - 85-89: strong. Everything important is there, with one small gap.
-  - 70-84: good bones, but a vague hook, a thin payoff or an unclear audience.
-  - 50-69: promising subject, weak execution.
-  - below 50: unusable as written.
-
-  Judge on the merits, never to seem tough or to leave room for the rewrite. If the idea is
-  well structured and strong, it belongs in the 85-95 band; a well written idea must never
-  be marked down just so the rewrite can look better. Reserve the low bands for real
-  problems, and state those problems plainly.
+- "criteria": object with a 0-100 integer score for each of:
+  hook_strength, specificity, curiosity, audience_fit, value_payoff, differentiation,
+  platform_fit, production_feasibility. Judge only evidence present in the idea and context.
+- "improved_criteria": the same eight scores, judging the rewritten idea under the same rubric.
+- Do not force the rewritten idea to score higher. It may score lower, equal, or higher.
 - "analysis": two or three short sentences of constructive criticism. Name the weakest part
-  and give a concrete fix. No encouragement padding, and no invented flaws either.
+-  and give a concrete fix. No encouragement padding and no invented flaws.
+- "strengths": up to three strengths supported by the provided idea/context.
+- "weaknesses": up to three specific gaps supported by the provided idea/context.
+- "improvement_opportunity": one practical improvement, not a promise of performance.
 - "outline": an array with exactly three short steps for the rewritten video. The third step
   must be the call to action.
 - "improved": an object with "title" (one punchy line, max 90 characters), "hook" (the first
   two seconds, one or two sentences) and "value" (why it works).
-- "improved_score": integer 0-100, never lower than "score", and at most a few points above
-  it when the original was already strong.
+- Never invent statistics, sources, trend claims, search-volume figures or research. If a
+  claim cannot be supported by the provided input, omit it or label it as an inference.
 - Write no filler: no emoji, no markdown.
 - {rules}
 
 OUTPUT
-Reply with one valid JSON object using exactly this shape:
+Reply with one valid JSON object using this shape. Criterion objects must contain all eight
+named criteria, each with an integer from 0 to 100:
 
-{{"score": 0, "analysis": "...", "outline": ["...", "...", "..."],
-"improved": {{"title": "...", "hook": "...", "value": "..."}}, "improved_score": 0}}"""
+{{"criteria": {{"hook_strength": 0, "specificity": 0, "curiosity": 0, "audience_fit": 0,
+"value_payoff": 0, "differentiation": 0, "platform_fit": 0, "production_feasibility": 0}},
+"improved_criteria": {{"hook_strength": 0, "specificity": 0, "curiosity": 0,
+"audience_fit": 0, "value_payoff": 0, "differentiation": 0, "platform_fit": 0,
+"production_feasibility": 0}}, "analysis": "...", "strengths": ["..."],
+"weaknesses": ["..."], "improvement_opportunity": "...",
+"outline": ["...", "...", "..."], "improved": {{"title": "...", "hook": "...", "value": "..."}}}}"""
 
 
 def _evaluation_user_prompt(text: str, context: str = "") -> str:
@@ -629,8 +636,33 @@ def _evaluation_user_prompt(text: str, context: str = "") -> str:
 {text}
 {context_section}
 
-Rate this idea, rewrite it stronger, and return the JSON object described in the system
+Evaluate the original and rewritten concept independently on all eight criteria. Derive no
+claims from outside this supplied information. Return the JSON object described in the system
 prompt."""
+
+
+def _validated_evaluation_criteria(scores: dict[str, Any]) -> dict[str, int]:
+    if not isinstance(scores, dict):
+        raise GroqFormatError("evaluation criteria must be an object")
+    validated: dict[str, int] = {}
+    for criterion in EVALUATION_CRITERIA:
+        value = scores.get(criterion)
+        if isinstance(value, bool):
+            raise GroqFormatError(f"invalid score for {criterion}")
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError) as exc:
+            raise GroqFormatError(f"missing or invalid score for {criterion}") from exc
+        if not 0 <= numeric <= 100:
+            raise GroqFormatError(f"score out of range for {criterion}")
+        validated[criterion] = int(round(numeric))
+    return validated
+
+
+def _weighted_evaluation_score(scores: dict[str, Any]) -> int:
+    """Validates all criterion scores and computes the fixed-weight overall score."""
+    validated = _validated_evaluation_criteria(scores)
+    return int(round(sum(validated[key] * EVALUATION_WEIGHTS[key] for key in EVALUATION_CRITERIA)))
 
 
 def calculate_word_count_range(duration: str) -> tuple[int, int]:
@@ -658,8 +690,8 @@ def _script_system_prompt(lang: str, short_form: bool, duration: str = "8-10min"
 
     duration_guide = duration_rules.get(duration, f"Standard duration. Write strictly between {min_words} and {max_words} words")
 
-    return f"""You are a professional YouTube scriptwriter with 20+ years of experience in
-high-retention content creation. You write scripts that hook viewers instantly, maintain
+    return f"""    You are a professional YouTube scriptwriter focused on clear, engaging content. You write
+    scripts that hook viewers, maintain
 engagement throughout, and drive action.
 
 You always answer with valid JSON and nothing else: no markdown, no code fences, no
@@ -676,8 +708,8 @@ FIELDS
 the main keyword and create curiosity.
 - "description": a detailed video description (200-300 characters) optimized for search,
 including the main keyword and value proposition.
-- "hashtag": an array of 10-15 highly relevant, trending hashtags. Mix broad and
-niche-specific tags with proven engagement.
+- "hashtag": an array of 10-15 relevant hashtag suggestions. Mix broad and niche-specific terms;
+do not claim current trend status or proven engagement.
 - "keywords": an array of 5-8 SEO keywords for the title, description, and tags.
 - "sections": an array of script sections. Each section has:
   - "name": section label (e.g., "Hook", "Main Content", "CTA")
@@ -701,7 +733,7 @@ For 15+ minute videos: Hook (0:00-0:45) → Deep Intro (0:45-1:30) → Main Cont
 with examples → Detailed Analysis → Multiple Takeaways → CTA → Outro
 
 ENGAGEMENT RULES
-- Every 30-60 seconds, include a pattern interrupt (question, visual change, stat)
+- Use a pattern interrupt (question or visual change) when it fits; do not invent a statistic.
 - Use pattern breaks: lists, examples, stories, comparisons
 - End each section with a transition to the next
 - Include 2-3 specific moments designed for comments/shares
@@ -715,7 +747,7 @@ PRODUCTION NOTES
 
 SEO OPTIMIZATION
 - Main keyword in first 150 characters of description
-- Tags must include: main keyword, related terms, trending tags
+- Tags must include the main keyword and relevant related terms; do not claim they are trending.
 - Title must be click-worthy but not clickbait
 - Keywords should match actual search intent
 
@@ -723,7 +755,8 @@ RULES
 - Target duration: {duration}
 - Write in conversational, engaging tone
 - No filler words - every line must earn its place
-- Include specific numbers, examples, or comparisons
+- Use numbers only when supplied by the brief or clearly presented as a suggested creative example.
+- Never invent sources, statistics, current trends, search volumes, or performance results.
 - CTA must be clear and compelling
 - {rules}
 
@@ -778,10 +811,8 @@ prompt."""
 
 def _seo_system_prompt(lang: str) -> str:
     rules = AI_LANGUAGE_RULES.get(lang, AI_LANGUAGE_RULES[DEFAULT_LANGUAGE])
-    return f"""You are an Expert YouTube SEO Specialist with 15+ years of experience in
-content optimization, video ranking, thumbnail design, keyword research, and high-CTR
-strategy. You know exactly what makes videos rank, get clicked, and convert views into
-subscribers.
+    return f"""    You are a YouTube SEO assistant that creates editorial suggestions from the supplied brief.
+    You do not have access to live search or performance data.
 
 You always answer with valid JSON and nothing else: no markdown, no code fences, no
 explanation before or after the object.
@@ -800,7 +831,7 @@ FIELDS
   * Include the main keyword naturally
   * Be 50-70 characters ideal (max 100)
   * Answer specific search intent
-  * Use proven SEO patterns (How-to, List, Guide, Tutorial, Comparison)
+  * Use common editorial title formats (How-to, List, Guide, Tutorial, Comparison)
   * Have a strong value promise and credibility
 
 - "clickbait_titles": an array of 5 curiosity-driven titles designed for higher CTR.
@@ -826,7 +857,8 @@ RULES
 - Clickbait titles must be curiosity-driven but not misleading
 - SEO description must be ready to paste into YouTube
 - Chapters should follow logical video progression
-- Focus on high-volume, low-competition keywords with practical search intent
+- Suggest relevant keyword phrases for the supplied topic and likely intent; do not claim search-volume or competition data without a connected source.
+- Never invent sources, statistics, current trends, search volume, or verified performance results.
 - {rules}
 
 OUTPUT
@@ -917,6 +949,39 @@ def _seo_from_groq(
     )
 
 
+def _visual_direction_from_groq(
+    topic: str,
+    *,
+    platform: str,
+    audience: str,
+    direction: str,
+    lang: str,
+) -> tuple[str, str]:
+    """Create a visual brief when available, otherwise return a clearly labeled template."""
+    rules = AI_LANGUAGE_RULES.get(lang, AI_LANGUAGE_RULES[DEFAULT_LANGUAGE])
+    if _configure_groq() is not None:
+        fallback = {
+            "en": f"Visual concept for {platform}: {topic}. Direction: {direction or 'Use one clear focal point and readable text.'} This is a prompt only; no image was generated.",
+            "ar": f"تصور مرئي لمنصة {platform} حول {topic}. التوجيه: {direction or 'استخدم عنصرًا بصريًا محوريًا ونصًا واضحًا.'} هذا توجيه نصي فقط ولم تُنشأ صورة.",
+            "fr": f"Concept visuel pour {platform} : {topic}. Direction : {direction or 'Un point focal clair et un texte lisible.'} Il s'agit uniquement d'un prompt ; aucune image n'a été générée.",
+        }[lang]
+        return fallback, "local_fallback"
+    prompt = f"""You create a truthful, production-ready thumbnail / visual direction as a creative prompt, not an image.
+Return only JSON: {{"direction": "..."}}.
+Use only the provided topic, platform, audience and user direction. Do not invent factual details, statistics, trends, brands, or promise performance. Do not claim an image was generated. Write every field in the language required here: {rules}"""
+    user = json.dumps({
+        "topic": topic,
+        "platform": platform,
+        "audience": audience,
+        "user_direction": direction,
+    }, ensure_ascii=False)
+    result = _groq_json(prompt, user, temperature=0.5)
+    visual_direction = _model_text(result.get("direction"), 1500)
+    if not visual_direction:
+        raise GroqFormatError("visual generator returned no direction")
+    return visual_direction, "model"
+
+
 # ---------------------------------------------------------------------------------------------------
 # rest of the file (original app.py content) kept intact below, with only the following targeted fixes:
 #   - CSS_TEMPLATE structure fixed
@@ -937,6 +1002,10 @@ def _ideas_from_groq(
     lang: str,
     variant: int,
     duration: str = "8-10min",
+    topic: str = "",
+    content_type: str = "",
+    content_format: str = "",
+    additional_context: str = "",
 ) -> list[Idea]:
     count = max(1, min(count, 10))
     data = _groq_json(
@@ -950,6 +1019,10 @@ def _ideas_from_groq(
             lang=lang,
             variant=variant,
             duration=duration,
+            topic=topic,
+            content_type=content_type,
+            content_format=content_format,
+            additional_context=additional_context,
         ),
         temperature=0.9,
     )
@@ -1068,34 +1141,35 @@ def _evaluation_from_groq(text: str, lang: str, context: str = "") -> Evaluation
     if not analysis:
         raise GroqFormatError("no 'analysis' in the answer")
 
+    criteria = _validated_evaluation_criteria(data.get("criteria"))
+    improved_criteria = _validated_evaluation_criteria(data.get("improved_criteria"))
     raw_outline = data.get("outline")
-    if not isinstance(raw_outline, list):
-        raise GroqFormatError("no 'outline' array in the answer")
+    if not isinstance(raw_outline, list) or len(raw_outline) != 3:
+        raise GroqFormatError("evaluation outline must contain exactly three steps")
     outline = [_model_text(step, 220) for step in raw_outline if _model_text(step)]
-    outline = outline[:3]
-    while len(outline) < 3:
-        outline.append(t_for(lang, "eval.step_placeholder", n=len(outline) + 1))
-
-    score = _model_score(data.get("score"))
-    improved_score = max(score, _model_score(data.get("improved_score"), minimum=score))
-
-    idea = _template_evaluation(text, lang).idea
     improved = data.get("improved")
-    if isinstance(improved, dict):
-        title = _model_text(improved.get("title"), 140)
-        if title:
-            idea = Idea(
-                title=title,
-                hook=_model_text(improved.get("hook"), 400),
-                value=_model_text(improved.get("value"), 400),
-            )
+    if not isinstance(improved, dict):
+        raise GroqFormatError("no improved idea object in the answer")
+    title = _model_text(improved.get("title"), 140)
+    hook = _model_text(improved.get("hook"), 400)
+    value = _model_text(improved.get("value"), 400)
+    if not all((title, hook, value)) or len(outline) != 3 or any(not step for step in outline):
+        raise GroqFormatError("incomplete improved idea or outline")
 
     return Evaluation(
-        score=score,
-        improved_score=improved_score,
+        score=_weighted_evaluation_score(criteria),
+        improved_score=_weighted_evaluation_score(improved_criteria),
         analysis=analysis,
-        idea=idea,
+        idea=Idea(title, hook, value),
         outline=tuple(outline),
+        criterion_scores=criteria,
+        improved_criterion_scores=improved_criteria,
+        strengths=tuple(_model_text(item, 220) for item in data.get("strengths", [])[:3] if _model_text(item))
+        if isinstance(data.get("strengths"), list) else (),
+        weaknesses=tuple(_model_text(item, 220) for item in data.get("weaknesses", [])[:3] if _model_text(item))
+        if isinstance(data.get("weaknesses"), list) else (),
+        improvement_opportunity=_model_text(data.get("improvement_opportunity"), 300),
+        score_basis="model",
     )
 
 
@@ -1464,35 +1538,81 @@ def _template_ideas(
     audience: str,
     lang: str,
     duration: str = "8-10min",
+    topic: str = "",
+    content_type: str = "",
+    content_format: str = "",
+    additional_context: str = "",
 ) -> list[Idea]:
-    """Offline generator: builds niche-specific ideas from the active language pool.
-
-    Used as the fallback whenever Groq is unavailable, so the page never goes blank.
-    """
-    _ = duration
-    short_form = is_short_form(platform)
-    mode = "short" if short_form else "long"
-    pool = template_pool(lang, short_form=short_form)
-
-    rng = random.Random(f"{mode}|{vibe}|{audience}|{lang}|{niche}|{variant}")
-    notes = " ".join(
-        part
-        for part in (
-            flavor(VIBE_FLAVOR, vibe, lang),
-            flavor(PLATFORM_FLAVOR, platform, lang),
-            flavor(AUDIENCE_FLAVOR, audience, lang),
-        )
-        if part
-    )
-    templates = rng.sample(pool, k=min(count, len(pool)))
-    return [
-        Idea(
-            title=tpl["title"].format(n=niche),
-            hook=tpl["hook"],
-            value=f"{tpl['value']} {notes}".strip(),
-        )
-        for tpl in templates
-    ]
+    """Clearly deterministic offline concepts; no fabricated trend or performance claims."""
+    titles = {
+        "en": (
+            "A practical exploration of {topic}",
+            "How to test one approach to {topic}",
+            "A beginner-friendly walkthrough of {topic}",
+            "Questions to ask before trying {topic}",
+        ),
+        "ar": (
+            "استكشاف عملي لموضوع {topic}",
+            "كيف تختبر طريقة واحدة في {topic}",
+            "شرح مبسط للمبتدئين عن {topic}",
+            "أسئلة ينبغي طرحها قبل تجربة {topic}",
+        ),
+        "fr": (
+            "Explorer {topic} de façon pratique",
+            "Tester une approche de {topic}",
+            "Un guide accessible de {topic}",
+            "Questions à se poser avant d'essayer {topic}",
+        ),
+    }[lang if lang in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE]
+    hooks = {
+        "en": "State one clear question about the topic, then show the steps used to explore it.",
+        "ar": "اطرح سؤالًا واضحًا عن الموضوع، ثم اعرض الخطوات المستخدمة لاستكشافه.",
+        "fr": "Pose une question claire sur le sujet, puis montre les étapes de son exploration.",
+    }[lang if lang in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE]
+    values = {
+        "en": "A structured, practical exploration; no outcome or performance result is assumed.",
+        "ar": "استكشاف عملي منظم دون افتراض نتيجة أو أداء مسبق.",
+        "fr": "Une exploration pratique et structurée, sans supposer de résultat ni de performance.",
+    }[lang if lang in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE]
+    localized_platform = option_label("platform", platform, lang)
+    localized_vibe = option_label("vibe", vibe, lang) if vibe else ""
+    localized_audience = option_label("audience", audience, lang) if audience else ""
+    count = max(1, min(count, len(titles)))
+    start = variant % len(titles)
+    selected = [titles[(start + index) % len(titles)] for index in range(count)]
+    ideas = []
+    idea_topic = topic.strip() or niche
+    for template in selected:
+        title = template.format(topic=idea_topic)
+        context = " · ".join(part for part in (
+            localized_platform,
+            localized_audience,
+            duration,
+            f"Channel niche: {niche}" if niche and niche != idea_topic else "",
+            content_type,
+            content_format,
+            additional_context,
+            localized_vibe,
+        ) if part)
+        ideas.append(Idea(
+            title=title,
+            hook=hooks,
+            value=f"{values} {context}".strip(),
+            steps=(
+                "State the question and define the scope.",
+                "Show the process or comparison using supplied material.",
+                "Summarize what was observed and invite a grounded follow-up.",
+            ) if lang == "en" else (
+                "حدّد السؤال ونطاقه.",
+                "اعرض العملية أو المقارنة اعتمادًا على المواد المتاحة.",
+                "لخّص ما تمت ملاحظته واقترح متابعة مستندة إلى المعطيات.",
+            ) if lang == "ar" else (
+                "Pose la question et définis le périmètre.",
+                "Montre la démarche ou la comparaison à partir des éléments fournis.",
+                "Résume les observations et propose une suite fondée sur les données disponibles.",
+            ),
+        ))
+    return ideas
 
 
 def generate_ideas(
@@ -1505,6 +1625,10 @@ def generate_ideas(
     audience: str = "",
     lang: str | None = None,
     duration: str = "8-10min",
+    topic: str = "",
+    content_type: str = "",
+    content_format: str = "",
+    additional_context: str = "",
 ) -> list[Idea]:
     """Generates ideas with Groq, falling back to the built-in pools when it is down.
 
@@ -1514,6 +1638,7 @@ def generate_ideas(
     clean_niche = niche.strip()
     if not clean_niche:
         return []
+    clean_topic = topic.strip() or clean_niche
 
     lang = lang if lang in SUPPORTED_LANGUAGES else current_lang()
     normalized_duration = normalize_duration_value(duration)
@@ -1530,6 +1655,10 @@ def generate_ideas(
                 lang=lang,
                 variant=variant,
                 duration=normalized_duration,
+                topic=clean_topic,
+                content_type=content_type,
+                content_format=content_format,
+                additional_context=additional_context,
             )
         except Exception as exc:
             _set_ai_error(_classify_ai_error(exc), _ai_error_detail(exc))
@@ -1548,6 +1677,10 @@ def generate_ideas(
         audience=audience,
         lang=lang,
         duration=normalized_duration,
+        topic=clean_topic,
+        content_type=content_type,
+        content_format=content_format,
+        additional_context=additional_context,
     )
 
 
@@ -1563,6 +1696,34 @@ class Evaluation:
     analysis: str
     idea: Idea
     outline: tuple[str, str, str] = ("", "", "")
+    criterion_scores: dict[str, int] | None = None
+    improved_criterion_scores: dict[str, int] | None = None
+    strengths: tuple[str, ...] = ()
+    weaknesses: tuple[str, ...] = ()
+    improvement_opportunity: str = ""
+    score_basis: str = "model"
+
+
+EVALUATION_CRITERIA: tuple[str, ...] = (
+    "hook_strength",
+    "specificity",
+    "curiosity",
+    "audience_fit",
+    "value_payoff",
+    "differentiation",
+    "platform_fit",
+    "production_feasibility",
+)
+EVALUATION_WEIGHTS: dict[str, float] = {
+    "hook_strength": 0.16,
+    "specificity": 0.14,
+    "curiosity": 0.14,
+    "audience_fit": 0.14,
+    "value_payoff": 0.14,
+    "differentiation": 0.10,
+    "platform_fit": 0.10,
+    "production_feasibility": 0.08,
+}
 
 
 CHECK_POINTS: dict[str, int] = {
@@ -1805,62 +1966,88 @@ def _idea_core(text: str, limit: int = 55) -> str:
     return f"{trimmed}…"
 
 
+def _offline_criterion_scores(text: str, context: str = "") -> dict[str, int]:
+    """Transparent local rubric estimate; this is not model reasoning or audience research."""
+    clean = " ".join(text.lower().split())
+    context_lower = " ".join(context.lower().split())
+    has_question = any(mark in clean for mark in ("?", "؟"))
+    has_detail = any(char.isdigit() for char in clean) or len(clean.split()) >= 8
+    has_audience = any(term in clean + " " + context_lower for term in (
+        "audience", "for ", "beginners", "students", "creators", "pour ", "للجمهور", "للمبتدئين", "للطلاب"
+    ))
+    has_payoff = any(term in clean for term in (
+        "learn", "build", "make", "compare", "test", "how to", "learn", "apprendre", "tester", "compare",
+        "تعلم", "اصنع", "قارن", "جرّب", "جرب"
+    ))
+    has_contrast = any(term in clean for term in (" vs ", "instead", "before", "after", "versus", "avant", "après", "بدل", "قبل", "بعد"))
+    platform = context_lower
+    has_platform = any(term in platform for term in ("youtube", "tiktok", "reels", "shorts", "podcast", "blog"))
+    has_action = any(term in clean for term in ("test", "build", "make", "show", "compare", "try", "tester", "montrer", "اصنع", "اختبر", "اعرض"))
+    return {
+        "hook_strength": 70 if has_question else 52 if len(clean.split()) >= 6 else 38,
+        "specificity": 68 if has_detail else 40,
+        "curiosity": 70 if has_question else 45,
+        "audience_fit": 68 if has_audience else 42,
+        "value_payoff": 68 if has_payoff else 42,
+        "differentiation": 68 if has_contrast else 43,
+        "platform_fit": 68 if has_platform else 50,
+        "production_feasibility": 68 if has_action else 52,
+    }
+
+
 def _template_evaluation(text: str, lang: str, context: str = "") -> Evaluation:
-    """Offline evaluator: heuristics used when Groq is unavailable.
-
-    Scores length, a number, a question, a curiosity trigger and a concrete audience, then
-    returns a localized analysis plus an upgraded idea.
-    """
+    """Offline rubric fallback, explicitly presented as a heuristic estimate."""
     clean = " ".join(text.split())
-    rng = random.Random(f"{lang}|{clean}")
-    score = 30
-    issues: list[str] = []
-
-    too_long = len(clean) > 160
-    for check, points in CHECK_POINTS.items():
-        if check == "length":
-            passed = 45 <= len(clean) <= 160
-        elif check == "number":
-            passed = any(ch.isdigit() for ch in clean)
-        elif check == "question":
-            passed = any(mark in clean for mark in QUESTION_MARKS[lang]) or any(
-                word in clean.lower() for word in QUESTION_WORDS[lang]
-            )
-        elif check == "curiosity":
-            passed = any(word in clean.lower() for word in CURIOSITY_WORDS[lang]) or "…" in clean
-        else:
-            passed = any(word in clean.lower() for word in SPECIFIC_WORDS[lang]) or any(
-                niche in clean.lower() for niche in ALL_NICHE_WORDS
-            )
-
-        if passed:
-            score += points
-        elif check == "length" and too_long:
-            issues.append(t_for(lang, "eval.check.length_long"))
-        else:
-            issues.append(t_for(lang, f"eval.check.{check}"))
-
-    score = max(5, min(95, score))
-    improved_score = min(97, score + 34)
-
-    if issues:
-        analysis = t_for(lang, "eval.issues_prefix") + " ".join(f"• {issue}" for issue in issues[:3])
-    else:
-        analysis = t_for(lang, "eval.strong")
+    core = _idea_core(clean)
+    localized = {
+        "en": {
+            "title": f"A practical test of {core}",
+            "hook": f"Show the starting point, test one specific change to {core}, and record what happens.",
+            "value": f"Give viewers a repeatable way to assess {core}, without promising a particular result.",
+            "analysis": "Offline heuristic estimate only; no AI reasoning, audience data, or external research was available.",
+            "outline": ("State the question and starting point.", "Demonstrate one concrete test and show the observed result.", "Summarize the limitation and invite viewers to share their own test."),
+        },
+        "ar": {
+            "title": f"اختبار عملي لـ {core}",
+            "hook": f"اعرض نقطة البداية، واختبر تغييرًا محددًا متعلقًا بـ{core}، ثم وثّق ما يحدث.",
+            "value": f"قدّم للمشاهد طريقة قابلة للتكرار لفحص {core} دون ضمان نتيجة مسبقة.",
+            "analysis": "هذا تقدير إرشادي محلي فقط؛ لم يتوفر استدلال من نموذج أو بيانات جمهور أو بحث خارجي.",
+            "outline": ("حدّد السؤال ونقطة البداية.", "نفّذ اختبارًا محددًا واعرض النتيجة المرصودة.", "لخّص حدود الاختبار وادعُ المشاهد لمشاركة تجربته."),
+        },
+        "fr": {
+            "title": f"Un test pratique de {core}",
+            "hook": f"Montre le point de départ, teste un changement précis lié à {core} et observe le résultat.",
+            "value": f"Propose aux spectateurs une façon reproductible d'évaluer {core}, sans promettre de résultat.",
+            "analysis": "Estimation heuristique locale uniquement : aucun raisonnement IA, donnée d'audience ou recherche externe n'était disponible.",
+            "outline": ("Pose la question et montre le point de départ.", "Réalise un test concret et présente le résultat observé.", "Résume les limites du test et invite le public à partager son expérience."),
+        },
+    }[lang if lang in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE]
+    criteria = _offline_criterion_scores(clean, context)
+    improved = Idea(localized["title"], localized["hook"], localized["value"])
+    improved_criteria = _offline_criterion_scores(" ".join((improved.title, improved.hook, improved.value)), context)
+    weak = sorted(criteria, key=criteria.get)[:3]
+    strong = sorted(criteria, key=criteria.get, reverse=True)[:3]
+    criterion_labels = {
+        "hook_strength": "hook", "specificity": "specificity", "curiosity": "curiosity",
+        "audience_fit": "audience fit", "value_payoff": "value/payoff",
+        "differentiation": "differentiation", "platform_fit": "platform fit",
+        "production_feasibility": "production feasibility",
+    }
+    analysis = localized["analysis"]
     if context.strip():
-        analysis = f"{analysis}\n\n{t_for(lang, 'eval.context_considered')}: {context.strip()}"
-
-    pattern = rng.choice(UPGRADE_PATTERNS[lang])
+        analysis += f"\n\n{t_for(lang, 'eval.context_considered')}: {context.strip()}"
     return Evaluation(
-        score=score,
-        improved_score=improved_score,
+        score=_weighted_evaluation_score(criteria),
+        improved_score=_weighted_evaluation_score(improved_criteria),
         analysis=analysis,
-        idea=Idea(
-            title=pattern["title"].format(idea=_idea_core(clean)),
-            hook=pattern["hook"],
-            value=pattern["angle"],
-        ),
-        outline=pattern["outline"],
+        idea=improved,
+        outline=localized["outline"],
+        criterion_scores=criteria,
+        improved_criterion_scores=improved_criteria,
+        strengths=tuple(f"{criterion_labels[key]} signal in the supplied text" for key in strong if criteria[key] >= 60),
+        weaknesses=tuple(f"{criterion_labels[key]} is not explicit in the supplied text" for key in weak if criteria[key] < 60),
+        improvement_opportunity=localized["value"],
+        score_basis="heuristic",
     )
 
 
@@ -4637,21 +4824,47 @@ def _extract_topic_from_prompt(prompt: str) -> str:
     if not text:
         return ""
     lower = text.lower()
-    for marker in ("about ", "on ", "for ", "regarding ", "about:", "topic:", "sur ", "à propos de ", "sur:", "عن ", "حول ", "موضوع:"):
+    markers = (
+        "about ", "regarding ", "topic:", "subject:", "sur ", "à propos de ",
+        "sujet:", "عن ", "حول ", "موضوع:",
+    )
+    candidate = ""
+    explicit_topic = False
+    for marker in markers:
         idx = lower.find(marker)
-        if idx != -1:
+        if idx >= 0:
+            explicit_topic = True
             candidate = text[idx + len(marker):].strip()
-            candidate = candidate.strip("\"'`")
-            if candidate:
-                return candidate
-    phrases = ["create ", "write ", "make ", "build ", "generate "]
-    for phrase in phrases:
-        if phrase in lower:
-            start = lower.find(phrase) + len(phrase)
-            rest = text[start:].strip()
-            if rest:
-                return rest[:120]
-    return text[:120]
+            break
+    if not candidate and _is_contextual_follow_up(text):
+        return ""
+    if not candidate:
+        candidate = re.sub(
+            r"^(?:please\s+)?(?:generate|create|give me|suggest|brainstorm)\s+(?:some\s+)?(?:ideas?|titles?)\s+(?:for\s+)?",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if candidate == text and not explicit_topic:
+            if re.match(r"^(?:i prefer|i like|please use|keep it|je préfère|j'aime|utilise|أفضل|أفضّل|أحب|استخدم)\b", lower):
+                return ""
+            if len(candidate.split()) > 5:
+                return ""
+    candidate = candidate.strip("\"'` ")
+    candidate = re.split(
+        r"\s*(?:,\s*(?:shorts?|short-form|then|and then|evaluate|analyze|analyse|"
+        r"évalue|analyse|قيّم|تقييم)|\b(?:shorts|short-form|tiktok|youtube|instagram reels|"
+        r"on tiktok|on youtube|for beginners|for students|for creators|للطلاب|للمبتدئين)\b)",
+        candidate,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0]
+    candidate = re.sub(r"\s+\d+\s*(?:\+?\s*)?(?:minutes?|mins?|seconds?|secs?).*$", "", candidate, flags=re.IGNORECASE)
+    audience = _chat_requested_audience(text, "")
+    if audience:
+        candidate = re.sub(rf"\s+for\s+{re.escape(audience)}\b", "", candidate, flags=re.IGNORECASE)
+    candidate = candidate.strip(" \t,;:-")
+    return candidate[:120]
 
 
 def _detect_platform(prompt: str, fallback: str = DEFAULT_PLATFORM) -> str:
@@ -4720,24 +4933,42 @@ def _detect_content_type(prompt: str, fallback: str = "video") -> str:
 
 
 def _apply_prompt_to_project_context(prompt: str) -> dict[str, Any]:
-    """Read a user message and save only the relevant structured project data."""
+    """Capture explicit project fields without replacing context with follow-up wording."""
     cleaned = (prompt or "").strip()
     if not cleaned:
         return {}
 
     ctx = ensure_project_context()
-    topic = _extract_topic_from_prompt(cleaned) or ctx.get("topic") or ctx.get("idea") or ""
+    extracted_topic = _extract_topic_from_prompt(cleaned)
+    is_follow_up = _is_contextual_follow_up(cleaned)
+    topic = (ctx.get("topic") or ctx.get("idea") or "") if is_follow_up else (extracted_topic or ctx.get("topic") or ctx.get("idea") or "")
     platform = _detect_platform(cleaned, ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
     content_type = _detect_content_type(cleaned, ctx.get("content_type") or "video")
 
-    update_project_context(
-        topic=topic,
-        idea=ctx.get("idea") or topic,
-        project_idea=ctx.get("project_idea") or topic,
-        platform=platform,
-        selected_platform=platform,
-        content_type=content_type,
-    )
+    updates: dict[str, Any] = {
+        "platform": platform,
+        "selected_platform": platform,
+        "niche": ctx.get("niche") or topic,
+    }
+    if topic:
+        updates.update(topic=topic, idea=ctx.get("idea") or topic, project_idea=ctx.get("project_idea") or topic)
+    if not is_follow_up:
+        updates["content_type"] = content_type
+    duration = _chat_requested_duration(cleaned, "")
+    if duration:
+        updates["duration"] = duration
+    audience = _chat_requested_audience(cleaned, "")
+    if audience:
+        updates["audience"] = audience
+    vibe = _chat_requested_vibe(cleaned, "")
+    if vibe:
+        updates["vibe"] = vibe
+    if _is_explicit_project_preference(cleaned):
+        preferences = list(ctx.get("preferences") or [])
+        if cleaned not in preferences:
+            preferences.append(cleaned[:200])
+        updates["preferences"] = preferences
+    update_project_context(**updates)
 
     return {
         "topic": topic,
@@ -4746,222 +4977,692 @@ def _apply_prompt_to_project_context(prompt: str) -> dict[str, Any]:
     }
 
 
+CHAT_INTENTS = frozenset({
+    "IDEATE", "EVALUATE", "COMPARE", "REWRITE", "SCRIPT", "SEO",
+    "VISUAL", "ANALYZE", "RESEARCH", "GENERAL_CHAT",
+})
+
+
+def _is_contextual_follow_up(prompt: str) -> bool:
+    text = (prompt or "").lower()
+    phrases = (
+        "make it", "make this", "shorten it", "rewrite it", "improve it", "more exciting",
+        "more engaging", "turn it into", "convert it to", "write the script", "improve the title",
+        "rends-le", "raccourcis", "améliore", "transforme-le", "اختصرها", "حسّنها", "اجعلها",
+        "حوّلها", "اكتب السكريبت", "حسن العنوان", "i prefer", "i like", "please use",
+        "je préfère", "j'aime", "أفضل", "أفضّل", "أحب", "استخدم",
+    )
+    return any(phrase in text for phrase in phrases)
+
+
+def _is_explicit_project_preference(prompt: str) -> bool:
+    text = (prompt or "").strip().lower()
+    return text.startswith((
+        "i prefer", "i like", "please use", "keep it",
+        "je préfère", "j'aime", "utilise",
+        "أفضل", "أفضّل", "أحب", "استخدم",
+    ))
+
+
+def _rule_classify_chat_intent(prompt: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Conservative local fallback used when model-based intent classification is unavailable."""
+    text = (prompt or "").lower()
+    context = context or {}
+    checks = (
+        ("RESEARCH", ("research", "latest", "current trend", "source", "بحث", "مصدر", "ترند", "tendance actuelle")),
+        ("COMPARE", ("compare", "versus", " vs ", "which is better", "comparez", "قارن", "مقارنة")),
+        ("SEO", ("seo", "keyword", "search tags", "metadata", "référencement", "mots-clés", "سيو", "كلمات مفتاحية")),
+        ("SCRIPT", ("script", "voiceover", "narration", "scénario", "voix off", "سكريبت", "سيناريو")),
+        ("VISUAL", ("thumbnail", "visual", "cover image", "miniature", "visuel", "صورة مصغرة", "مرئي")),
+        ("EVALUATE", ("evaluate", "evaluation", "rate this", "score this", "évalue", "noter", "قيّم", "تقييم")),
+        ("ANALYZE", ("analyze", "analyse", "analysis", "explain why", "analyser", "حلل", "تحليل")),
+        ("REWRITE", ("rewrite", "improve", "shorten", "make it more", "make it less", "turn it into", "convert it to",
+                     "réécris", "améliore", "raccourcis", "اختصر", "حسّن", "اجعلها", "حوّلها")),
+        ("IDEATE", ("idea", "ideas", "brainstorm", "ideate", "idée", "أفكار", "فكرة", "اقترح")),
+    )
+    matches = [intent for intent, phrases in checks if any(phrase in text for phrase in phrases)]
+    if "IDEATE" in matches and "EVALUATE" in matches:
+        intents = ["IDEATE", "EVALUATE"]
+    elif matches:
+        intents = [matches[0]]
+    elif _is_contextual_follow_up(prompt) and context.get("last_artifact"):
+        intents = ["REWRITE"]
+    else:
+        intents = ["GENERAL_CHAT"]
+    return {"intents": intents, "source": "local_rules"}
+
+
+def _classify_chat_intent(
+    prompt: str,
+    lang: str,
+    context: dict[str, Any],
+    history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Classify intent with Groq when configured; disclose and use local rules on failure."""
+    fallback = _rule_classify_chat_intent(prompt, context)
+    if _configure_groq() is not None:
+        return fallback
+    recent_history = [
+        {"role": item.get("role", ""), "content": str(item.get("content", ""))[:600]}
+        for item in history[-8:]
+        if item.get("role") in {"user", "assistant"}
+    ]
+    classifier_prompt = """Classify the user's current intent using the current message, recent conversation, and project context.
+Return only JSON with: intents (one to three ordered values from IDEATE,EVALUATE,COMPARE,REWRITE,SCRIPT,SEO,VISUAL,ANALYZE,RESEARCH,GENERAL_CHAT), topic, niche, audience, platform, duration, content_type, format, vibe, preferences.
+Keep existing project values when the user refers to it with "it/this". Return only values explicit or strongly implied by the conversation; otherwise empty strings/lists.
+Do not answer the user, invent facts, or infer live research. An explicit request for research is RESEARCH even when no retrieval tool is available."""
+    user_prompt = json.dumps({
+        "message": prompt,
+        "language": lang,
+        "project_context": {
+            key: context.get(key) for key in (
+                "topic", "niche", "platform", "content_type", "format", "duration",
+                "vibe", "audience", "idea", "titles", "selected_title", "preferences",
+                "last_artifact",
+            ) if context.get(key) is not None
+        },
+        "recent_messages": recent_history,
+    }, ensure_ascii=False)
+    try:
+        result = _groq_json(classifier_prompt, user_prompt, temperature=0.0)
+        raw_intents = result.get("intents")
+        if not isinstance(raw_intents, list) or not raw_intents:
+            raise GroqFormatError("intent classifier returned no intents")
+        intents = []
+        for intent in raw_intents[:3]:
+            normalized = str(intent).strip().upper()
+            if normalized not in CHAT_INTENTS:
+                raise GroqFormatError("intent classifier returned an unknown intent")
+            if normalized not in intents:
+                intents.append(normalized)
+        if not intents:
+            raise GroqFormatError("intent classifier returned no valid intents")
+        slots = {}
+        for field in ("topic", "niche", "audience", "platform", "duration", "content_type", "format", "vibe"):
+            value = result.get(field)
+            slots[field] = _model_text(value, 240) if isinstance(value, str) else ""
+        preferences = result.get("preferences", [])
+        if not isinstance(preferences, list) or any(not isinstance(value, str) for value in preferences):
+            raise GroqFormatError("intent classifier returned invalid preferences")
+        slots["preferences"] = [_model_text(value, 200) for value in preferences[:8] if _model_text(value)]
+        slots["intents"] = intents
+        slots["source"] = "model"
+        return slots
+    except Exception as exc:
+        fallback["fallback_reason"] = _classify_ai_error(exc)
+        return fallback
+
+
+def _validate_chat_response(
+    value: dict[str, Any],
+    *,
+    default_intent: str = "GENERAL_CHAT",
+) -> dict[str, Any]:
+    """Validate and normalize the UI-facing structured response contract."""
+    intent = str(value.get("intent") or default_intent).upper()
+    if intent not in CHAT_INTENTS:
+        raise GroqFormatError("chat response has an invalid intent")
+    answer = _model_text(value.get("answer"), 4000)
+    if not answer:
+        raise GroqFormatError("chat response is missing its answer")
+    list_fields = ("facts", "inferences", "assumptions", "actions")
+    normalized: dict[str, Any] = {
+        "intent": intent,
+        "answer": answer,
+        "analysis": _model_text(value.get("analysis"), 3000),
+        "facts": [],
+        "inferences": [],
+        "assumptions": [],
+        "score": None,
+        "artifacts": {},
+        "actions": [],
+        "next_step": _model_text(value.get("next_step"), 500),
+        "source": str(value.get("source") or "model"),
+    }
+    for field in list_fields:
+        items = value.get(field, [])
+        if not isinstance(items, list) or any(not isinstance(item, str) for item in items):
+            raise GroqFormatError(f"chat response field {field} must be a string array")
+        normalized[field] = [_model_text(item, 400) for item in items[:8] if _model_text(item)]
+    artifacts = value.get("artifacts", {})
+    if not isinstance(artifacts, dict):
+        raise GroqFormatError("chat response artifacts must be an object")
+    normalized["artifacts"] = _validated_json_payload(artifacts)
+    score = value.get("score")
+    if score is not None:
+        if isinstance(score, bool) or not isinstance(score, (int, float)) or not 0 <= score <= 100:
+            raise GroqFormatError("chat response score must be null or a number from 0 to 100")
+        normalized["score"] = int(round(score))
+    return normalized
+
+
+def _validated_json_payload(value: Any, depth: int = 0) -> Any:
+    if depth > 6:
+        raise GroqFormatError("chat artifact nesting is too deep")
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, list):
+        if len(value) > 40:
+            raise GroqFormatError("chat artifact contains too many items")
+        return [_validated_json_payload(item, depth + 1) for item in value]
+    if isinstance(value, dict):
+        if len(value) > 40 or any(not isinstance(key, str) for key in value):
+            raise GroqFormatError("chat artifact object is invalid")
+        return {key: _validated_json_payload(item, depth + 1) for key, item in value.items()}
+    raise GroqFormatError("chat artifact contains a non-JSON value")
+
+
+def _idea_payload(idea: Idea) -> dict[str, Any]:
+    return {
+        "title": idea.title, "hook": idea.hook, "value": idea.value,
+        "steps": list(idea.steps), "tags": list(idea.tags), "keywords": list(idea.keywords),
+    }
+
+
+def _script_payload(script: Script) -> dict[str, Any]:
+    return {
+        "title": script.title,
+        "description": script.description,
+        "hashtags": list(script.hashtags),
+        "keywords": list(script.keywords),
+        "sections": [dict(section) for section in script.sections],
+    }
+
+
+def _seo_payload(data: SEOData) -> dict[str, Any]:
+    return {
+        "thumbnail_texts": list(data.thumbnail_texts),
+        "seo_titles": list(data.seo_titles),
+        "clickbait_titles": list(data.clickbait_titles),
+        "chapters": list(data.chapters),
+        "seo_description": data.seo_description,
+        "seo_tags": list(data.seo_tags),
+    }
+
+
+def _evaluation_payload(result: Evaluation) -> dict[str, Any]:
+    return {
+        "score": result.score,
+        "improved_score": result.improved_score,
+        "analysis": result.analysis,
+        "idea": _idea_payload(result.idea),
+        "outline": list(result.outline),
+        "criterion_scores": dict(result.criterion_scores or {}),
+        "improved_criterion_scores": dict(result.improved_criterion_scores or {}),
+        "strengths": list(result.strengths),
+        "weaknesses": list(result.weaknesses),
+        "improvement_opportunity": result.improvement_opportunity,
+        "score_basis": result.score_basis,
+    }
+
+
+def _chat_artifact_payload(kind: str, data: Any) -> Any:
+    if kind == "ideas":
+        return [_idea_payload(idea) for idea in data if isinstance(idea, Idea)]
+    if kind == "script" and isinstance(data, Script):
+        return _script_payload(data)
+    if kind == "seo" and isinstance(data, SEOData):
+        return _seo_payload(data)
+    if kind == "evaluation" and isinstance(data, Evaluation):
+        return _evaluation_payload(data)
+    return _validated_json_payload(data)
+
+
+def _sync_chat_artifacts_to_project(artifacts: dict[str, Any]) -> None:
+    """Persist model-produced edits so the focused workspaces reuse the same project artifacts."""
+    updates: dict[str, Any] = {}
+    title = artifacts.get("title")
+    if isinstance(title, str) and title.strip():
+        updates["selected_title"] = title.strip()
+        updates["titles"] = list(dict.fromkeys([title.strip(), *(ensure_project_context().get("titles") or [])]))
+    idea = artifacts.get("idea")
+    if isinstance(idea, dict) and isinstance(idea.get("title"), str):
+        idea_payload = _validated_json_payload(idea)
+        updates.update(
+            idea=idea_payload["title"],
+            selected_title=idea_payload["title"],
+            titles=list(dict.fromkeys([idea_payload["title"], *(ensure_project_context().get("titles") or [])])),
+            last_artifact={"kind": "idea", "data": idea_payload},
+        )
+    script = artifacts.get("script")
+    if isinstance(script, dict) and isinstance(script.get("title"), str):
+        script_payload = _validated_json_payload(script)
+        updates.update(
+            script=script_payload.get("description", ""),
+            script_artifact=script_payload,
+            description=script_payload.get("description", ""),
+            hashtags=script_payload.get("hashtags", []),
+            keywords=script_payload.get("keywords", []),
+            last_artifact={"kind": "script", "data": script_payload},
+        )
+    seo = artifacts.get("seo")
+    if isinstance(seo, dict):
+        seo_payload = _validated_json_payload(seo)
+        updates.update(
+            seo=seo_payload.get("seo_description", ""),
+            seo_artifact=seo_payload,
+            keywords=seo_payload.get("seo_tags", []),
+            search_tags=seo_payload.get("seo_tags", []),
+            last_artifact={"kind": "seo", "data": seo_payload},
+        )
+    visual = artifacts.get("visual")
+    if isinstance(visual, (str, dict)):
+        visual_payload = _validated_json_payload(visual)
+        direction = visual_payload if isinstance(visual_payload, str) else str(visual_payload.get("direction") or "")
+        if direction:
+            updates.update(visual_direction=direction, last_artifact={"kind": "visual", "data": visual_payload})
+    if updates:
+        update_project_context(**updates)
+
+
+def _brain_general_response(
+    prompt: str,
+    lang: str,
+    intent: str,
+    context: dict[str, Any],
+) -> dict[str, Any]:
+    """Produce grounded conversational analysis; never claims to have searched the web."""
+    if intent == "RESEARCH":
+        return _validate_chat_response({
+            "intent": intent,
+            "answer": {
+                "en": "I can't verify current or external information in this app because no web or retrieval source is connected. Share a source or enable a data source to research this reliably.",
+                "ar": "لا أستطيع التحقق من معلومات حديثة أو خارجية لأن التطبيق لا يتصل حاليًا بالويب أو بمصدر استرجاع. أرسل مصدرًا أو اربط مصدر بيانات لإجراء بحث موثوق.",
+                "fr": "Je ne peux pas vérifier des informations actuelles ou externes : aucune source Web ou de récupération n'est connectée. Partage une source ou connecte une source de données pour mener une recherche fiable.",
+            }[lang],
+            "analysis": "No external research was performed.",
+            "facts": [],
+            "inferences": [],
+            "assumptions": [],
+            "source": "no_retrieval",
+        })
+
+    if _configure_groq() is not None:
+        return _validate_chat_response({
+            "intent": intent,
+            "answer": {
+                "en": "I can use the project context, but model reasoning is unavailable right now. Configure the AI service or provide a specific source/input for me to work from.",
+                "ar": "يمكنني استخدام سياق المشروع، لكن استدلال النموذج غير متاح حاليًا. أعد تهيئة خدمة الذكاء الاصطناعي أو زوّدني بمصدر/مدخل محدد للعمل عليه.",
+                "fr": "Je peux utiliser le contexte du projet, mais le raisonnement du modèle est indisponible. Configure le service IA ou fournis une source/un contenu précis.",
+            }[lang],
+            "analysis": "Local fallback; no model reasoning was performed.",
+            "assumptions": ["No external source is connected."],
+            "source": "local_fallback",
+        })
+
+    system = f"""You are the central TubeSpark content assistant. Use the current request, project context and recent messages; when the user says "it/this", act on the current artifact rather than starting over.
+Return only valid JSON with fields intent, answer, analysis, facts, inferences, assumptions, score, artifacts, actions, next_step.
+Use intent {intent}. facts may contain only information explicitly present in the supplied user/project content. Mark uncertain reasoning as inferences or assumptions. Never invent sources, statistics, metrics, current trends, search volume, or claim research was performed. No retrieval/web tool is connected.
+For REWRITE, return the complete revised asset in artifacts using a relevant key (idea, title, script, seo, or visual) and preserve the user's constraints. Keep all text in {lang}."""
+    user = json.dumps({
+        "request": prompt,
+        "project_context": context,
+        "recent_messages": st.session_state.get("copilot_messages", [])[-8:],
+    }, ensure_ascii=False, default=str)
+    try:
+        raw = _groq_json(system, user, temperature=0.4)
+        raw["intent"] = intent
+        response = _validate_chat_response(raw, default_intent=intent)
+        supplied_text = f"{prompt}\n{user}".casefold()
+        grounded_facts = []
+        unverified_claims = []
+        for fact in response["facts"]:
+            if fact.casefold() in supplied_text:
+                grounded_facts.append(fact)
+            else:
+                unverified_claims.append(f"Unverified model inference: {fact}")
+        response["facts"] = grounded_facts
+        response["inferences"] = (response["inferences"] + unverified_claims)[:8]
+        return response
+    except Exception as exc:
+        _set_ai_error(_classify_ai_error(exc), _ai_error_detail(exc))
+        return _validate_chat_response({
+            "intent": intent,
+            "answer": {
+                "en": "I couldn't safely validate the model response, so I haven't presented it as a completed result. Please retry or simplify the request.",
+                "ar": "تعذّر التحقق من استجابة النموذج بأمان، لذلك لم أعرضها كنتيجة مكتملة. أعد المحاولة أو بسّط الطلب.",
+                "fr": "Je n'ai pas pu valider la réponse du modèle de manière fiable ; je ne la présente donc pas comme un résultat terminé. Réessaie ou simplifie la demande.",
+            }[lang],
+            "analysis": "The structured response failed validation.",
+            "source": "validation_fallback",
+        })
+
+
 def _chat_orchestrator(prompt: str, lang: str) -> str:
-    """Route a chat request through the existing generators and retain its structured result."""
+    """Classify, execute, and persist a structured response for the current project."""
     cleaned = (prompt or "").strip()
     if not cleaned:
         return "Please tell me what you want to create."
 
     lang = lang if lang in SUPPORTED_LANGUAGES else current_lang()
-    st.session_state.pop("chat_output", None)
     ctx = ensure_project_context()
+    classification = _classify_chat_intent(
+        cleaned,
+        lang,
+        ctx,
+        st.session_state.get("copilot_messages", []),
+    )
     parsed = _apply_prompt_to_project_context(cleaned)
-    lower = cleaned.lower()
-    topic = parsed.get("topic") or ctx.get("topic") or ctx.get("idea") or ""
-    platform = parsed.get("platform") or ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM
-    niche = ctx.get("topic") or ctx.get("idea") or topic or "general"
-    duration = _chat_requested_duration(cleaned, ctx.get("duration") or "3-5min")
-    audience = _chat_requested_audience(cleaned, ctx.get("audience") or "")
-    vibe = _chat_requested_vibe(cleaned, ctx.get("vibe") or "professional")
-    update_project_context(audience=audience or None, duration=duration, vibe=vibe)
-    ctx = ensure_project_context()
-
-    def includes(*terms: str) -> bool:
-        return any(term in lower for term in terms)
-
-    def answer(en: str, ar: str, fr: str) -> str:
-        return {"en": en, "ar": ar, "fr": fr}[lang]
-
-    if includes("seo", "keyword", "keywords", "search", "mots-clés", "référencement", "سيو", "كلمات مفتاحية"):
-        if topic:
-            _, seo_context = _seo_generation_inputs(
-                title=ctx.get("selected_title") or "",
-                description=ctx.get("description") or ctx.get("seo") or "",
-                niche=niche,
-                primary_keyword=(ctx.get("keywords") or [""])[0] if ctx.get("keywords") else "",
-                audience=audience,
-                platform=platform,
-            )
-            seo_context = f"{seo_context}\nUser request: {cleaned}"
-            result = _seo_from_groq(topic, seo_context, lang=lang)
-            update_project_context(topic=topic, platform=platform, content_type="seo", seo=result.seo_description, keywords=list(result.seo_tags))
-            st.session_state["seo_result"] = result
-            st.session_state["chat_output"] = {"kind": "seo", "request": cleaned, "data": result, "context": {"topic": topic, "niche": niche, "platform": platform}}
-            return answer(
-                "SEO was generated for the current topic. The complete result is shown below and saved to the project.",
-                "تم إنشاء نتائج تحسين محركات البحث للموضوع الحالي. تظهر النتيجة كاملة أدناه وحُفظت في المشروع.",
-                "Le SEO a été généré pour le sujet actuel. Le résultat complet est affiché ci-dessous et enregistré dans le projet.",
-            )
-        return answer(
-            "I need a topic in the project context before I can generate SEO.",
-            "أحتاج إلى موضوع في سياق المشروع قبل إنشاء نتائج SEO.",
-            "J'ai besoin d'un sujet dans le contexte du projet pour générer le SEO.",
-        )
-
-    if includes("script", "voiceover", "narration", "scénario", "voix off", "سكريبت", "سيناريو"):
-        idea = ctx.get("idea") or ctx.get("project_idea") or topic or ""
-        if not idea:
-            return answer(
-                "I need an idea or topic in the project context before generating a script.",
-                "أحتاج إلى فكرة أو موضوع في سياق المشروع قبل إنشاء السكريبت.",
-                "J'ai besoin d'une idée ou d'un sujet dans le contexte du projet avant de rédiger un script.",
-            )
-        script_brief = f"{idea}\nUser request: {cleaned}"
-        script_audience = audience or "general viewers"
-        script = _script_from_groq(
-            niche,
-            script_brief,
-            platform=platform,
-            vibe=vibe,
-            audience=script_audience,
-            lang=lang,
-            duration=duration,
-        )
-        st.session_state["script_result"] = script
-        st.session_state["script_result_context"] = {
-            "platform": platform,
-            "audience": script_audience,
-            "duration": duration,
-            "style": vibe,
-            "content_type": parsed.get("content_type") or ctx.get("content_type") or "video",
-            "language": lang,
-        }
-        update_project_context(
-            topic=topic or idea,
-            idea=idea,
-            platform=platform,
-            content_type="script",
-            script=script.description,
-            description=script.description,
-            hashtags=list(script.hashtags),
-            keywords=list(script.keywords),
-        )
-        st.session_state["chat_output"] = {"kind": "script", "request": cleaned, "data": script}
-        return answer(
-            "The script is ready. Its description, sections, keywords, and hashtags are shown below.",
-            "السكريبت جاهز. يظهر أدناه الوصف والأقسام والكلمات المفتاحية والوسوم.",
-            "Le script est prêt. Sa description, ses sections, ses mots-clés et ses hashtags sont affichés ci-dessous.",
-        )
-
-    if includes("evaluate", "evaluation", "analyze", "analyse", "analysis", "score", "évaluer", "évalue", "analyse", "analyser", "تقييم", "قيّم", "حلل", "تحليل"):
-        idea = ctx.get("selected_title") or ctx.get("idea") or topic
-        if idea:
-            evaluation_context = "\n".join(
-                value for value in (
-                    f"User request: {cleaned}",
-                    f"Platform: {platform}",
-                    f"Audience: {audience}",
-                    f"Content type: {ctx.get('content_type') or ''}",
-                ) if value.split(": ", 1)[-1].strip()
-            )
-            result = evaluate_idea(idea, lang=lang, context=evaluation_context)
-            st.session_state["idea_eval_result"] = result
-            st.session_state["chat_output"] = {
-                "kind": "evaluation",
-                "request": cleaned,
-                "data": result,
-                "original": idea,
-                "context": {
-                    "platform": platform,
-                    "audience": audience,
-                    "niche": ctx.get("topic") or "",
-                    "content_type": ctx.get("content_type") or "",
-                    "title": ctx.get("selected_title") or "",
-                },
-            }
-            update_project_context(evaluation=result.analysis, content_type="evaluation", platform=platform)
-            return answer(
-                "The idea was evaluated. Scores, analysis, and the improved version are shown below.",
-                "تم تقييم الفكرة. تظهر أدناه الدرجات والتحليل والنسخة المحسّنة.",
-                "L'idée a été évaluée. Les scores, l'analyse et la version améliorée sont affichés ci-dessous.",
-            )
-
-    if includes("thumbnail", "visual", "cover", "design", "image", "miniature", "visuel", "صورة مصغرة", "مرئي"):
-        visual_prompt = (
-            f"Create a {platform} visual concept for '{topic or ctx.get('topic') or 'the selected topic'}'. "
-            f"User direction: {cleaned}. Use a clear focal point, readable typography, and a strong hook."
-        )
-        update_project_context(topic=topic or ctx.get("topic"), platform=platform, content_type="visual", visual_direction=visual_prompt)
-        st.session_state["thumbnail_prompt"] = visual_prompt
-        st.session_state["chat_output"] = {"kind": "visual", "request": cleaned, "data": visual_prompt}
-        return answer(
-            "The visual direction is ready and shown below.",
-            "التوجيه المرئي جاهز ويظهر أدناه.",
-            "La direction visuelle est prête et affichée ci-dessous.",
-        )
-
-    if includes("idea", "ideas", "title", "titles", "headline", "idée", "idées", "titre", "titres", "فكرة", "أفكار", "عنوان", "عناوين"):
-        ideas = generate_ideas(
-            topic or niche,
-            3,
-            platform=platform,
-            vibe=cleaned,
-            audience=audience,
-            lang=lang,
-            duration=duration,
-        )
-        titles = [idea.title for idea in ideas]
-        update_project_context(topic=topic or niche, idea=titles[0] if titles else topic or niche, titles=titles, selected_title=titles[0] if titles else "", content_type="idea", platform=platform)
-        st.session_state["ideas"] = ideas
-        st.session_state["ideas_niche"] = topic or niche
-        st.session_state["ideas_generation_context"] = {
-            "platform": platform,
-            "audience": ctx.get("audience") or "",
-            "duration": duration,
-        }
-        st.session_state["chat_output"] = {
-            "kind": "ideas",
-            "request": cleaned,
-            "data": ideas,
-            "topic": topic or niche,
-            "platform": platform,
-            "details": {
-                "platform": platform,
-                "audience": audience,
-                "duration": duration,
-                "content_type": ctx.get("content_type") or "video",
-                "language": lang,
-            },
-        }
-        return answer(
-            "Ideas were generated for the current topic and are shown below.",
-            "تم إنشاء أفكار للموضوع الحالي وتظهر أدناه.",
-            "Des idées ont été générées pour le sujet actuel et sont affichées ci-dessous.",
-        )
-
-    # Default: project-context read + update only. No regeneration unless user explicitly requests a specific asset.
+    slots = classification
+    topic = slots.get("topic") or parsed.get("topic") or ctx.get("topic") or ctx.get("idea") or ""
+    if _is_contextual_follow_up(cleaned) and not slots.get("topic"):
+        topic = ctx.get("topic") or ctx.get("idea") or ""
+    platform = slots.get("platform") or parsed.get("platform") or ctx.get("platform") or DEFAULT_PLATFORM
+    niche = slots.get("niche") or ctx.get("niche") or topic
+    duration = _chat_requested_duration(cleaned, slots.get("duration") or ctx.get("duration") or "8-10min")
+    audience = slots.get("audience") or _chat_requested_audience(cleaned, ctx.get("audience") or "")
+    vibe = slots.get("vibe") or _chat_requested_vibe(cleaned, ctx.get("vibe") or "professional")
+    content_type = slots.get("content_type") or parsed.get("content_type") or ctx.get("content_type") or "video"
+    format_value = slots.get("format") or ctx.get("format") or ("short-form" if duration == "shorts" else "")
+    preferences = list(ctx.get("preferences") or [])
+    for preference in slots.get("preferences", []):
+        if preference not in preferences:
+            preferences.append(preference)
+    if _is_explicit_project_preference(cleaned) and cleaned not in preferences:
+        preferences.append(cleaned[:200])
+    explicit_updates: dict[str, Any] = {
+        "platform": platform,
+        "niche": niche,
+        "duration": duration,
+        "audience": audience,
+        "vibe": vibe,
+        "format": format_value,
+        "preferences": preferences,
+    }
     if topic:
-        update_project_context(topic=topic, platform=platform, content_type=parsed.get("content_type") or ctx.get("content_type") or "video")
-        st.session_state["chat_output"] = {
-            "kind": "context",
-            "request": cleaned,
-            "data": {"topic": topic, "platform": platform, "content_type": parsed.get("content_type") or ctx.get("content_type") or "video"},
-        }
-        return (
-            f"I understood the project as: topic='{topic}', platform='{platform}'. I updated the current project context without regenerating the full workflow."
-            if lang == "en"
-            else f"فهمت المشروع كالتالي: الموضوع='{topic}'، المنصة='{platform}'. قمت بتحديث سياق المشروع الحالي دون إعادة توليد المسار بالكامل."
-            if lang == "ar"
-            else f"J’ai compris le projet comme: sujet='{topic}', plateforme='{platform}'. J’ai mis à jour le contexte du projet sans régénérer tout le workflow."
-        )
+        explicit_updates["topic"] = topic
+    if content_type:
+        explicit_updates["content_type"] = content_type
+    update_project_context(**explicit_updates)
+    ctx = ensure_project_context()
+    intents = slots.get("intents") or ["GENERAL_CHAT"]
+    if not topic and not ctx.get("last_artifact") and any(value not in {"GENERAL_CHAT", "RESEARCH"} for value in intents):
+        response = _validate_chat_response({
+            "intent": intents[0],
+            "answer": {
+                "en": "Tell me the topic or share the idea you want me to work on.",
+                "ar": "أخبرني بالموضوع أو شاركني الفكرة التي تريد العمل عليها.",
+                "fr": "Indique le sujet ou partage l'idée sur laquelle tu veux travailler.",
+            }[lang],
+            "assumptions": [],
+            "source": classification.get("source", "local_rules"),
+        }, default_intent=intents[0])
+        st.session_state["chat_response"] = response
+        st.session_state["chat_output"] = {"kind": "context", "request": cleaned, "data": {}}
+        return response["answer"]
 
-    return "I can use the current project context, but I need either a topic or an active idea before I can route the request."
+    artifacts: dict[str, Any] = {}
+    rendered_artifacts: dict[str, Any] = {}
+    messages: list[str] = []
+    general_responses: list[dict[str, Any]] = []
+    ai_available = _configure_groq() is None
+    initial_ai_error = st.session_state.get(AI_ERROR_SESSION_KEY)
+    generation_failed = False
+    active_idea = ctx.get("selected_title") or ctx.get("idea") or topic
+    source = classification.get("source", "local_rules")
+    research_requested = "RESEARCH" in intents
+    for intent in intents:
+        if intent == "RESEARCH":
+            response = _brain_general_response(cleaned, lang, intent, ctx)
+            messages.append(response["answer"])
+            source = response["source"]
+            continue
+        if intent in {"GENERAL_CHAT", "COMPARE", "REWRITE", "ANALYZE"}:
+            response = _brain_general_response(cleaned, lang, intent, ctx)
+            messages.append(response["answer"])
+            artifacts.update(response.get("artifacts") or {})
+            _sync_chat_artifacts_to_project(response.get("artifacts") or {})
+            general_responses.append(response)
+            source = response.get("source") or source
+            continue
+        try:
+            if intent == "IDEATE":
+                ideas = generate_ideas(
+                    niche,
+                    3,
+                    platform=platform,
+                    vibe=vibe,
+                    audience=audience,
+                    lang=lang,
+                    duration=duration,
+                    topic=topic,
+                    content_type=content_type,
+                    content_format=format_value,
+                    additional_context=cleaned,
+                )
+                if not ideas:
+                    raise GroqFormatError("idea generator returned no ideas")
+                rendered_artifacts["ideas"] = ideas
+                artifacts["ideas"] = _chat_artifact_payload("ideas", ideas)
+                active_idea = ideas[0].title
+                titles = [idea.title for idea in ideas]
+                update_project_context(
+                    topic=topic, niche=niche, idea=active_idea, titles=titles, selected_title=active_idea,
+                    platform=platform, audience=audience, duration=duration, vibe=vibe,
+                    content_type=content_type, last_artifact={"kind": "ideas", "items": artifacts["ideas"]},
+                )
+                st.session_state["ideas"] = ideas
+                st.session_state["ideas_niche"] = niche
+                st.session_state["ideas_generation_context"] = {
+                    "topic": topic, "niche": niche, "platform": platform,
+                    "audience": audience, "duration": duration,
+                    "content_type": content_type, "format": format_value,
+                }
+                messages.append({
+                    "en": "Generated project ideas are shown in this conversation.",
+                    "ar": "تظهر أفكار المشروع المُنشأة في هذه المحادثة.",
+                    "fr": "Les idées générées pour le projet sont affichées dans cette conversation.",
+                }[lang])
+            elif intent == "EVALUATE":
+                idea_text = active_idea or ctx.get("idea") or topic
+                latest_ideas = rendered_artifacts.get("ideas")
+                if latest_ideas:
+                    first_idea = latest_ideas[0]
+                    idea_text = "\n".join(part for part in (first_idea.title, first_idea.hook, first_idea.value) if part)
+                evaluation_context = _evaluation_generation_context(
+                    platform=platform, audience=audience,
+                    niche=ctx.get("niche") or topic, content_type=content_type,
+                    title=ctx.get("selected_title") or "",
+                )
+                result = evaluate_idea(idea_text, lang=lang, context=evaluation_context)
+                rendered_artifacts["evaluation"] = result
+                artifacts["evaluation"] = _chat_artifact_payload("evaluation", result)
+                st.session_state["idea_eval_result"] = result
+                update_project_context(
+                    evaluation=result.analysis,
+                    evaluation_details=artifacts["evaluation"],
+                    last_artifact={"kind": "evaluation", "data": artifacts["evaluation"]},
+                    platform=platform,
+                )
+                messages.append({
+                    "en": "The idea has been evaluated against the rubric; scores and the revised concept are shown below.",
+                    "ar": "تم تقييم الفكرة وفق المعايير؛ تظهر الدرجات والصياغة المنقحة أدناه.",
+                    "fr": "L'idée a été évaluée selon la grille ; les notes et la version retravaillée sont affichées ci-dessous.",
+                }[lang])
+            elif intent == "SCRIPT":
+                idea_text = active_idea or ctx.get("idea") or topic
+                script = _script_from_groq(
+                    niche,                     f"{idea_text}\nContent type: {content_type}\nFormat: {format_value}\nUser request: {cleaned}",
+                    platform=platform, vibe=vibe, audience=audience or "general viewers",
+                    lang=lang, duration=duration,
+                )
+                rendered_artifacts["script"] = script
+                artifacts["script"] = _chat_artifact_payload("script", script)
+                details = {
+                    "platform": platform, "audience": audience, "duration": duration,
+                    "style": vibe, "content_type": content_type, "language": lang,
+                }
+                st.session_state["script_result"] = script
+                st.session_state["script_result_context"] = details
+                update_project_context(
+                    script=script.description, script_artifact=artifacts["script"],
+                    description=script.description, hashtags=list(script.hashtags),
+                    keywords=list(script.keywords), last_artifact={"kind": "script", "data": artifacts["script"]},
+                    platform=platform, audience=audience, duration=duration, vibe=vibe, format=format_value,
+                )
+                messages.append({
+                    "en": "The full script and its metadata are shown below.",
+                    "ar": "يظهر أدناه السكريبت كاملًا وبياناته.",
+                    "fr": "Le script complet et ses métadonnées sont affichés ci-dessous.",
+                }[lang])
+            elif intent == "SEO":
+                _, seo_context = _seo_generation_inputs(
+                    title=ctx.get("selected_title") or "",
+                    description=ctx.get("description") or ctx.get("seo") or "",
+                    niche=niche,
+                    primary_keyword=(ctx.get("keywords") or [""])[0] if ctx.get("keywords") else "",
+                    audience=audience, platform=platform,
+                )
+                seo_context += f"\nContent type: {content_type}\nDuration: {duration}\nUser request: {cleaned}"
+                result = _seo_from_groq(topic, seo_context, lang=lang)
+                rendered_artifacts["seo"] = result
+                artifacts["seo"] = _chat_artifact_payload("seo", result)
+                st.session_state["seo_result"] = result
+                update_project_context(
+                    seo=result.seo_description, seo_artifact=artifacts["seo"],
+                    keywords=list(result.seo_tags), search_tags=list(result.seo_tags),
+                    last_artifact={"kind": "seo", "data": artifacts["seo"]},
+                    platform=platform, audience=audience,
+                )
+                messages.append({
+                    "en": "SEO output for the current project is shown below.",
+                    "ar": "تظهر أدناه مخرجات SEO للمشروع الحالي.",
+                    "fr": "Les résultats SEO du projet actuel sont affichés ci-dessous.",
+                }[lang])
+            elif intent == "VISUAL":
+                visual_prompt, visual_source = _visual_direction_from_groq(
+                    topic,
+                    platform=platform,
+                    audience=audience,
+                    direction=cleaned,
+                    lang=lang,
+                )
+                if visual_source == "local_fallback":
+                    source = "local_fallback"
+                rendered_artifacts["visual"] = visual_prompt
+                artifacts["visual"] = {"direction": visual_prompt}
+                st.session_state["thumbnail_prompt"] = visual_prompt
+                update_project_context(
+                    visual_direction=visual_prompt, content_type="visual",
+                    last_artifact={"kind": "visual", "data": artifacts["visual"]},
+                )
+                messages.append({
+                    "en": "A visual direction prompt is shown below; this does not generate an image.",
+                    "ar": "يظهر أدناه توجيه مرئي؛ هذا لا ينشئ صورة فعلية.",
+                    "fr": "Une direction visuelle est affichée ci-dessous ; aucune image n'est générée.",
+                }[lang])
+        except Exception as exc:
+            _set_ai_error(_classify_ai_error(exc), _ai_error_detail(exc))
+            generation_failed = True
+            messages.append({
+                "en": f"I couldn't complete {intent.lower()} because the generation response failed. The project context was kept; please retry.",
+                "ar": f"تعذّر إكمال {intent.lower()} بسبب فشل استجابة التوليد. احتفظت بسياق المشروع؛ أعد المحاولة.",
+                "fr": f"Je n'ai pas pu terminer {intent.lower()} car la réponse de génération a échoué. Le contexte du projet est conservé ; réessaie.",
+            }[lang])
+
+    if research_requested and len(intents) == 1:
+        response = _brain_general_response(cleaned, lang, "RESEARCH", ctx)
+    elif general_responses and not rendered_artifacts:
+        response = _validate_chat_response({
+            **general_responses[-1],
+            "answer": " ".join(messages),
+            "artifacts": artifacts,
+            "actions": list(dict.fromkeys(action for item in general_responses for action in item.get("actions", []))),
+        }, default_intent=intents[0])
+    elif rendered_artifacts or artifacts:
+        current_ai_error = st.session_state.get(AI_ERROR_SESSION_KEY)
+        if current_ai_error and current_ai_error != initial_ai_error:
+            source = "local_fallback"
+        response = _validate_chat_response({
+            "intent": intents[0],
+            "answer": " ".join(messages),
+            "analysis": (
+                "Intent classification used conservative local rules; generation used the configured model."
+                if source == "local_rules" and ai_available else
+                "Offline deterministic output was used; it is not live AI reasoning or external research."
+                if not ai_available else ""
+            ),
+            "facts": [],
+            "inferences": [],
+            "assumptions": [],
+            "artifacts": artifacts,
+            "actions": ["open_idea_generator", "open_script_writer", "open_seo", "open_visual", "copy"],
+            "next_step": "",
+            "source": "model" if ai_available and source == "model" else "local_fallback" if not ai_available else source,
+        }, default_intent=intents[0])
+    elif generation_failed:
+        response = _validate_chat_response({
+            "intent": intents[0],
+            "answer": " ".join(messages),
+            "analysis": "The requested artifact was not generated; no success result is being shown.",
+            "source": "generation_error",
+        }, default_intent=intents[0])
+    else:
+        response = _brain_general_response(cleaned, lang, intents[0], ctx)
+        _sync_chat_artifacts_to_project(response.get("artifacts") or {})
+
+    answer_text = response["answer"]
+    output_kind = next(iter(rendered_artifacts)) if len(rendered_artifacts) == 1 else "bundle" if rendered_artifacts else "context"
+    output_data: Any = next(iter(rendered_artifacts.values())) if len(rendered_artifacts) == 1 else rendered_artifacts
+    output = {
+        "kind": output_kind,
+        "request": cleaned,
+        "data": output_data,
+        "response": response,
+        "topic": topic,
+        "platform": platform,
+        "details": {
+            "topic": topic, "platform": platform, "audience": audience,
+            "duration": duration, "content_type": content_type,
+            "format": format_value, "style": vibe, "language": lang,
+        },
+        "context": {
+            "topic": topic, "niche": ctx.get("niche") or topic,
+            "platform": platform, "audience": audience,
+            "content_type": content_type, "title": ctx.get("selected_title") or "",
+        },
+    }
+    st.session_state["chat_response"] = response
+    st.session_state["chat_output"] = output
+    st.session_state["last_chat_request"] = cleaned
+    st.session_state["last_chat_reply"] = answer_text
+    update_project_context(last_artifact={
+        "kind": (
+            next(iter(artifacts))
+            if output_kind == "context" and len(artifacts) == 1
+            else output_kind
+        ),
+        "data": _validated_json_payload(
+            next(iter(artifacts.values()))
+            if output_kind == "context" and len(artifacts) == 1
+            else artifacts
+        ),
+        "intent": intents[0],
+        "response": response,
+    })
+    return answer_text
 
 
 def _chat_requested_duration(prompt: str, fallback: str) -> str:
     lower = (prompt or "").lower()
-    if any(token in lower for token in ("shorts", "short-form", "شورتس")):
+    if any(token in lower for token in ("shorts", "short-form", "شورتس")) or re.search(r"\b(?:60|30)\s*(?:seconds?|secs?)\b", lower):
         return "shorts"
-    match = re.search(r"\b(3\s*[-–]\s*5|8\s*[-–]\s*10|15\+?)\s*(?:min(?:ute)?s?)\b", lower)
+    match = re.search(r"\b(3\s*[-–]\s*5|8\s*[-–]\s*10|15\s*[-–]\s*20|15\+?|20)\s*(?:min(?:ute)?s?)\b", lower)
     if match:
         selected = match.group(1).replace(" ", "")
-        if selected == "15":
+        if selected in {"15", "20", "15-20"}:
             selected = "15+"
         return normalize_duration_value(selected + "min")
+    exact_minutes = re.search(r"\b(\d{1,2})\s*(?:minutes?|mins?)\b", lower)
+    if exact_minutes:
+        minutes = int(exact_minutes.group(1))
+        return "shorts" if minutes <= 1 else "3-5min" if minutes <= 5 else "8-10min" if minutes <= 10 else "15min+"
     if re.search(r"\b8\s+minutes?\b", lower):
         return "8-10min"
     if re.search(r"\b3\s+minutes?\b", lower):
         return "3-5min"
+    if not fallback:
+        return ""
     return normalize_duration_value(fallback)
 
 
@@ -5007,6 +5708,13 @@ def _copilot_reply(prompt: str, lang: str) -> str:
 
 
 def _chat_output_text(output: dict[str, Any]) -> str:
+    response = output.get("response")
+    if isinstance(response, dict):
+        parts = [str(response.get("answer") or "")]
+        artifacts = response.get("artifacts") or {}
+        if artifacts:
+            parts.append(json.dumps(artifacts, ensure_ascii=False, indent=2, default=str))
+        return "\n\n".join(part for part in parts if part)
     kind = output.get("kind")
     data = output.get("data")
     if kind == "ideas":
@@ -5037,9 +5745,16 @@ def _chat_output_text(output: dict[str, Any]) -> str:
     return "\n".join(f"{key}: {value}" for key, value in (data or {}).items()) if isinstance(data, dict) else str(data or "")
 
 
-def _render_chat_output() -> None:
-    output = st.session_state.get("chat_output")
-    if not st.session_state.get("last_chat_reply"):
+def _render_chat_output(
+    output_override: dict[str, Any] | None = None,
+    response_override: dict[str, Any] | None = None,
+    *,
+    key_prefix: str = "chat_latest",
+) -> None:
+    output = output_override or st.session_state.get("chat_output")
+    response = response_override or st.session_state.get("chat_response")
+    reply = (response or {}).get("answer") or st.session_state.get("last_chat_reply")
+    if not reply:
         return
     if not output:
         ctx = ensure_project_context()
@@ -5058,7 +5773,23 @@ def _render_chat_output() -> None:
         st.markdown(f"**{t('chat.user_request')}**")
         st.write(output.get("request") or st.session_state.get("last_chat_request", ""))
         st.markdown(f"**{t('chat.ai_response')}**")
-        st.write(st.session_state["last_chat_reply"])
+        st.write(reply)
+        if response:
+            if response.get("analysis"):
+                st.caption(response["analysis"])
+            if response.get("score") is not None:
+                st.metric(t("result.score"), f"{response['score']}/100")
+            for field, label in (
+                ("facts", t("chat.facts")),
+                ("inferences", t("chat.inferences")),
+                ("assumptions", t("chat.assumptions")),
+            ):
+                values = response.get(field) or []
+                if values:
+                    st.markdown(f"**{label}**")
+                    st.write("\n".join(f"- {value}" for value in values))
+            if response.get("source") in {"local_rules", "local_fallback", "no_retrieval"}:
+                st.caption(t("chat.source_notice"))
 
         kind = output.get("kind")
         data = output.get("data")
@@ -5077,6 +5808,22 @@ def _render_chat_output() -> None:
             render_evaluation(data, output.get("original", ""), context=output.get("context"))
         elif kind == "visual":
             _render_visual_result(t("result.visual"), str(data or ""), meta=output.get("platform", ""))
+        elif kind == "bundle" and isinstance(data, dict):
+            for artifact_kind, artifact_data in data.items():
+                if artifact_kind == "ideas":
+                    _render_idea_result(
+                        artifact_data or [], output.get("topic", ""),
+                        platform=output.get("platform") or DEFAULT_PLATFORM,
+                        details=output.get("details"),
+                    )
+                elif artifact_kind == "script" and isinstance(artifact_data, Script):
+                    _render_script_result(artifact_data, details=output.get("details"))
+                elif artifact_kind == "seo" and isinstance(artifact_data, SEOData):
+                    _render_seo_result(artifact_data, details=output.get("context"))
+                elif artifact_kind == "evaluation" and isinstance(artifact_data, Evaluation):
+                    render_evaluation(artifact_data, output.get("original", ""), context=output.get("context"))
+                elif artifact_kind == "visual":
+                    _render_visual_result(t("result.visual"), str(artifact_data or ""), meta=output.get("platform", ""))
         elif kind == "context":
             details = data or {}
             for label, key in (
@@ -5086,24 +5833,69 @@ def _render_chat_output() -> None:
             ):
                 if details.get(key):
                     st.markdown(f"**{html_escape(label)}:** {html_escape(str(details[key]))}", unsafe_allow_html=True)
+        if response and response.get("artifacts") and kind in {"context", "bundle"}:
+            if kind == "context" and response["artifacts"]:
+                with st.expander(t("chat.structured_artifacts")):
+                    st.json(response["artifacts"])
 
-        action_cols = st.columns(4)
-        with action_cols[0]:
-            if st.button(t("workspace.use_content_studio"), key="chat_use_content_studio", use_container_width=True):
-                st.session_state["active_workspace"] = "Idea Generator"
-                st.rerun()
-        with action_cols[1]:
-            if st.button(t("workspace.send_to_seo"), key="chat_send_seo", use_container_width=True):
-                st.session_state["active_workspace"] = "SEO Optimizer"
-                st.rerun()
-        with action_cols[2]:
-            if st.button(t("workspace.send_to_visual"), key="chat_send_visual", use_container_width=True):
-                st.session_state["active_workspace"] = "Visual Prompt Studio"
-                st.rerun()
-        with action_cols[3]:
-            if st.button(t("chat.copy_result"), key="chat_copy_reply", use_container_width=True):
-                st.session_state["show_chat_reply_copy"] = True
-        if st.session_state.get("show_chat_reply_copy"):
+        workspace_by_kind = {
+            "ideas": "Idea Generator",
+            "evaluation": "Idea Evaluator",
+            "script": "Script Writer",
+            "seo": "SEO Optimizer",
+            "visual": "Visual Prompt Studio",
+        }
+        target_kind = kind if kind != "bundle" else next(iter(data), "")
+        if target_kind == "context" and response:
+            artifact_workspace_kinds = {
+                "ideas": "ideas",
+                "idea": "ideas",
+                "title": "ideas",
+                "evaluation": "evaluation",
+                "script": "script",
+                "seo": "seo",
+                "visual": "visual",
+            }
+            target_kind = next(
+                (artifact_workspace_kinds[key] for key in artifact_workspace_kinds if key in response.get("artifacts", {})),
+                target_kind,
+            )
+        target_workspace = workspace_by_kind.get(target_kind)
+        action_labels = []
+        if target_workspace:
+            action_labels.append((f"Open in {target_workspace}", target_workspace))
+        next_action = {
+            "ideas": "Create Script",
+            "evaluation": "Create Script",
+            "script": "Optimize SEO",
+            "seo": "Create Visual",
+            "visual": "Improve this direction",
+        }.get(target_kind)
+        if next_action:
+            action_labels.append((next_action, "follow_up"))
+        if action_labels:
+            action_cols = st.columns(min(3, len(action_labels) + 1))
+            for idx, (label, destination) in enumerate(action_labels):
+                with action_cols[idx]:
+                    if st.button(label, key=f"{key_prefix}_action_{idx}", use_container_width=True):
+                        if destination == "follow_up":
+                            prompt_by_action = {
+                                "Create Script": "Write a complete script for the selected project idea using the saved audience, format, duration, and tone.",
+                                "Optimize SEO": "Optimize SEO for the current project and preserve the selected platform and audience.",
+                                "Create Visual": "Create a visual direction for the current project.",
+                                "Improve this direction": "Rewrite this visual direction to be clearer and more specific.",
+                            }
+                            st.session_state["main_ai_copilot_input"] = prompt_by_action[label]
+                        else:
+                            st.session_state["active_workspace"] = destination
+                            if destination == "Idea Evaluator":
+                                st.session_state["idea_eval_input"] = ensure_project_context().get("selected_title") or ensure_project_context().get("idea") or ""
+                        st.rerun()
+        copy_idx = len(action_labels)
+        with st.columns(min(3, len(action_labels) + 1))[copy_idx]:
+            if st.button(t("chat.copy_result"), key=f"{key_prefix}_copy", use_container_width=True):
+                st.session_state[f"show_{key_prefix}_copy"] = True
+        if st.session_state.get(f"show_{key_prefix}_copy"):
             render_copy_button(_chat_output_text(output))
 
 
@@ -5184,25 +5976,25 @@ def render_ai_chat_panel() -> None:
 
     action_cols = st.columns(3)
     with action_cols[0]:
-        if st.button("Use in Idea Generator", use_container_width=True):
+        if st.button("Use in Idea Generator", use_container_width=True, key="chat_use_content_studio"):
             st.session_state["active_workspace"] = "Idea Generator"
             update_project_context(topic=ctx.get("topic") or ctx.get("idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
             st.rerun()
     with action_cols[1]:
-        if st.button("Open Idea Evaluator", use_container_width=True):
+        if st.button("Open Idea Evaluator", use_container_width=True, key="chat_open_idea_evaluator"):
             st.session_state["active_workspace"] = "Idea Evaluator"
             st.session_state["idea_eval_input"] = ctx.get("selected_title") or ctx.get("idea") or ctx.get("topic") or ""
             st.session_state["idea_eval_niche"] = ctx.get("topic") or ctx.get("idea") or ""
             update_project_context(topic=ctx.get("topic") or ctx.get("idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
             st.rerun()
     with action_cols[2]:
-        if st.button("Send to Script Writer", use_container_width=True):
+        if st.button("Send to Script Writer", use_container_width=True, key="chat_send_to_script_writer"):
             st.session_state["active_workspace"] = "Script Writer"
             update_project_context(topic=ctx.get("topic") or ctx.get("idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
             st.rerun()
     project_action_cols = st.columns(2)
     with project_action_cols[0]:
-        if st.button("Send to SEO Optimizer", use_container_width=True):
+        if st.button("Send to SEO Optimizer", use_container_width=True, key="chat_send_to_seo"):
             st.session_state["active_workspace"] = "SEO Optimizer"
             update_project_context(topic=ctx.get("topic") or ctx.get("idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
             st.rerun()
@@ -5216,10 +6008,16 @@ def render_ai_chat_panel() -> None:
                 st.info("Type a request first to save it into the project context.")
 
     st.markdown('<div class="ts-chat-shell">', unsafe_allow_html=True)
-    for message in st.session_state["copilot_messages"]:
+    for message_index, message in enumerate(st.session_state["copilot_messages"]):
         with st.chat_message(message["role"]):
             st.caption(t("chat.user_request") if message["role"] == "user" else t("chat.ai_response"))
             st.markdown(message["content"])
+            if message["role"] == "assistant" and message.get("response") and message.get("output"):
+                _render_chat_output(
+                    message["output"],
+                    message["response"],
+                    key_prefix=f"chat_turn_{message_index}",
+                )
 
     with st.form("ai_chat_form", clear_on_submit=True):
         input_col, send_col = st.columns([9, 3])
@@ -5238,14 +6036,23 @@ def render_ai_chat_panel() -> None:
         prompt = chat_prompt.strip()
         st.session_state["copilot_messages"].append({"role": "user", "content": prompt})
         reply = _copilot_reply(prompt, current_lang())
-        st.session_state["copilot_messages"].append({"role": "assistant", "content": reply})
+        st.session_state["copilot_messages"].append({
+            "role": "assistant",
+            "content": reply,
+            "response": st.session_state.get("chat_response"),
+            "output": st.session_state.get("chat_output"),
+        })
         st.session_state["last_chat_request"] = prompt
         st.session_state["last_chat_reply"] = reply
         st.session_state["show_chat_reply_copy"] = False
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
-
-    _render_chat_output()
+    latest_message = next(
+        (message for message in reversed(st.session_state["copilot_messages"]) if message.get("role") == "assistant"),
+        {},
+    )
+    if st.session_state.get("chat_output") and latest_message.get("output") != st.session_state.get("chat_output"):
+        _render_chat_output()
 
 
 def render_idea_cards(ideas: list[Idea], niche: str, *, platform: str) -> None:
@@ -5433,8 +6240,30 @@ def render_evaluation(
         col_b.metric(
             t("eval.improved_score"),
             f"{result.improved_score}%",
-            f"+{result.improved_score - result.score}",
+            f"{result.improved_score - result.score:+d}",
         )
+
+        if result.score_basis == "heuristic":
+            st.info(t("eval.heuristic_notice"))
+        if result.criterion_scores:
+            with st.expander(t("eval.criteria")):
+                for criterion in EVALUATION_CRITERIA:
+                    original_score = result.criterion_scores.get(criterion)
+                    revised_score = (result.improved_criterion_scores or {}).get(criterion)
+                    label = t(f"eval.criterion.{criterion}")
+                    score_cols = st.columns([3, 1, 1])
+                    score_cols[0].write(label)
+                    score_cols[1].metric(t("eval.original"), f"{original_score}/100" if original_score is not None else "—")
+                    score_cols[2].metric(t("eval.revised"), f"{revised_score}/100" if revised_score is not None else "—")
+        if result.strengths:
+            st.markdown(f"**{t('eval.strengths')}**")
+            st.write("\n".join(f"- {item}" for item in result.strengths))
+        if result.weaknesses:
+            st.markdown(f"**{t('eval.weaknesses')}**")
+            st.write("\n".join(f"- {item}" for item in result.weaknesses))
+        if result.improvement_opportunity:
+            st.markdown(f"**{t('eval.opportunity')}**")
+            st.write(result.improvement_opportunity)
 
         outline_items = "".join(f"<li>{html_escape(step)}</li>" for step in result.outline)
         render_html(
@@ -5804,22 +6633,32 @@ PROJECT_PLATFORM_OPTIONS = [
 
 
 def ensure_project_context() -> dict[str, Any]:
-    """Shared project context across the four workspaces; no database or auth layer involved."""
+    """Shared session-backed project memory used across the workspaces and chat."""
     defaults = {
         "topic": "",
+        "niche": "",
         "platform": DEFAULT_PLATFORM,
         "content_type": "video",
+        "format": "",
+        "duration": "8-10min",
+        "vibe": "professional",
+        "audience": "",
         "idea": "",
         "titles": [],
         "selected_title": "",
         "evaluation": "",
+        "evaluation_details": {},
         "script": "",
+        "script_artifact": {},
         "description": "",
         "seo": "",
+        "seo_artifact": {},
         "keywords": [],
         "hashtags": [],
         "search_tags": [],
         "visual_direction": "",
+        "preferences": [],
+        "last_artifact": {},
         # compatibility aliases already used elsewhere in the app
         "project_idea": "",
         "selected_platform": DEFAULT_PLATFORM,
@@ -5843,6 +6682,8 @@ def ensure_project_context() -> dict[str, Any]:
         ctx["platform"] = ctx.get("selected_platform") or DEFAULT_PLATFORM
     if not ctx.get("content_type"):
         ctx["content_type"] = "video"
+    if not ctx.get("niche") and ctx.get("topic"):
+        ctx["niche"] = ctx["topic"]
 
     return ctx
 
@@ -5856,13 +6697,18 @@ def update_project_context(**kwargs: Any) -> None:
 
         if key == "topic":
             ctx["project_idea"] = value
-            ctx["idea"] = value
+            if "niche" not in kwargs:
+                ctx["niche"] = value
+            if not ctx.get("idea"):
+                ctx["idea"] = value
         if key == "idea":
             ctx["project_idea"] = value
-            ctx["topic"] = value
+            if not ctx.get("topic"):
+                ctx["topic"] = value
         if key == "project_idea":
             ctx["idea"] = value
-            ctx["topic"] = value
+            if not ctx.get("topic"):
+                ctx["topic"] = value
         if key == "platform":
             ctx["selected_platform"] = value
         if key == "selected_platform":
@@ -5882,6 +6728,7 @@ def normalize_duration_value(duration: str | None) -> str:
         "8-10min": "8-10min",
         "8-10": "8-10min",
         "15-20min": "15min+",
+        "15min": "15min+",
         "15+min": "15min+",
         "15min+": "15min+",
         "15-20": "15min+",
@@ -6183,9 +7030,7 @@ def render_content_studio_workspace() -> None:
 
         if generate_clicked:
             if niche.strip():
-                prompt_vibe = f"{content_type} for {audience or 'general audiences'}"
-                if notes.strip():
-                    prompt_vibe = f"{prompt_vibe} | {notes.strip()}"
+                prompt_vibe = st.session_state.get("project_context", {}).get("vibe") or "practical"
                 with st.spinner("Generating ideas..."):
                     normalized_duration = normalize_duration_value(duration_choice)
                     items = generate_ideas(
@@ -6196,6 +7041,9 @@ def render_content_studio_workspace() -> None:
                         audience=audience,
                         lang=lang,
                         duration=normalized_duration,
+                        content_type=content_type,
+                        content_format=content_type,
+                        additional_context=notes,
                     )
                     st.session_state["ideas"] = items
                     st.session_state["ideas_niche"] = niche.strip()
