@@ -1,4 +1,5 @@
 import unittest
+from contextlib import nullcontext
 from unittest.mock import patch
 
 import app
@@ -22,6 +23,25 @@ class LandingNavigationTests(unittest.TestCase):
         self.assertIn('href="#how-it-works"', html)
         self.assertIn('href="#pricing"', html)
         self.assertIn('href="#faq"', html)
+
+    def test_landing_page_renders_the_language_selector(self):
+        with (
+            patch.object(app.st, "markdown"),
+            patch.object(app.st, "columns", return_value=(nullcontext(), nullcontext())),
+            patch.object(app.st, "button", return_value=False),
+            patch.object(app, "render_language_switcher") as render_language_switcher,
+            patch.object(app, "render_hero"),
+            patch.object(app, "render_landing_tool_cards"),
+            patch.object(app, "render_features_grid"),
+            patch.object(app, "render_how_it_works"),
+            patch.object(app, "render_pricing_section"),
+            patch.object(app, "render_faq_section"),
+            patch.object(app, "render_cta_banner"),
+            patch.object(app, "render_footer"),
+        ):
+            app.render_landing_page()
+
+        render_language_switcher.assert_called_once_with()
 
 
 if __name__ == "__main__":

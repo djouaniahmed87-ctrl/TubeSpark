@@ -2036,10 +2036,10 @@ CSS_TEMPLATE = """
 __FONT_IMPORT__
 :root {
     --bg: #090D16;
-    --surface-1: #0F1522;
-    --surface-2: #141B2A;
-    --surface-3: #192235;
-    --surface-input: #0C121E;
+    --surface-1: #121A29;
+    --surface-2: #192438;
+    --surface-3: #202D43;
+    --surface-input: #1B2940;
 
     --text-primary: #F5F7FB;
     --text-secondary: #CBD5E1;
@@ -2048,9 +2048,9 @@ __FONT_IMPORT__
 
     --primary: #8B5CF6;
     --primary-hover: #A78BFA;
-    --primary-soft: rgba(139, 92, 246, 0.14);
-    --primary-border: rgba(139, 92, 246, 0.32);
-    --primary-glow: rgba(139, 92, 246, 0.18);
+    --primary-soft: rgba(139, 92, 246, 0.10);
+    --primary-border: rgba(139, 92, 246, 0.24);
+    --primary-glow: rgba(139, 92, 246, 0.12);
 
     --success: #22C55E;
     --warning: #F59E0B;
@@ -2058,15 +2058,15 @@ __FONT_IMPORT__
     --info: #38BDF8;
 
     --border-subtle: rgba(148, 163, 184, 0.10);
-    --border-default: rgba(148, 163, 184, 0.16);
-    --border-strong: rgba(148, 163, 184, 0.24);
+    --border-default: rgba(148, 163, 184, 0.18);
+    --border-strong: rgba(139, 92, 246, 0.28);
 
     --primary-1: #8B5CF6;
     --primary-2: #EC4899;
     --accent: #A855F7;
     --primary-gradient: linear-gradient(135deg, var(--primary), var(--accent));
     --bg-dark: var(--bg);
-    --bg-gradient: linear-gradient(180deg, #090D16 0%, #0F1522 50%, #141B2A 100%);
+    --bg-gradient: linear-gradient(180deg, #090D16 0%, #101827 100%);
     --surface: var(--surface-1);
     --surface-soft: var(--surface-2);
     --panel: var(--surface-1);
@@ -2132,13 +2132,42 @@ div[data-baseweb="select"] select,
 textarea {
     background: var(--surface-input) !important;
     color: var(--text-primary) !important;
-    border: 1px solid var(--border-default) !important;
-    border-radius: 12px !important;
+    border: 1px solid rgba(167, 139, 250, 0.24) !important;
+    border-radius: 14px !important;
     font-size: 0.98rem;
     line-height: 1.6;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
-    backdrop-filter: blur(10px);
-    transition: all 0.3s ease;
+    box-shadow: none !important;
+    transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+div[data-testid="stSelectbox"] [role="group"],
+div[data-testid="stMultiSelect"] [role="group"] {
+    background: var(--surface-input) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid rgba(167, 139, 250, 0.24) !important;
+    border-radius: 14px !important;
+    box-shadow: none !important;
+    transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+div[data-testid="stSelectbox"] [role="group"]:focus-within,
+div[data-testid="stMultiSelect"] [role="group"]:focus-within {
+    background: var(--surface-2) !important;
+    border-color: rgba(167, 139, 250, 0.58) !important;
+    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.12), 0 0 14px rgba(139, 92, 246, 0.08) !important;
+}
+
+div[data-testid="stSelectbox"] [role="group"]:hover,
+div[data-testid="stMultiSelect"] [role="group"]:hover {
+    border-color: rgba(167, 139, 250, 0.38) !important;
+}
+
+div[data-testid="stSelectbox"] [role="group"] input,
+div[data-testid="stMultiSelect"] [role="group"] input {
+    background: transparent !important;
+    color: var(--text-primary) !important;
+    border: 0 !important;
+    box-shadow: none !important;
 }
 
 div[data-baseweb="input"] input::placeholder,
@@ -2150,10 +2179,37 @@ textarea::placeholder {
 div[data-baseweb="input"]:focus-within input,
 div[data-baseweb="select"]:focus-within select,
 textarea:focus {
-    border-color: var(--accent) !important;
-    box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.3), 0 4px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+    border-color: rgba(167, 139, 250, 0.58) !important;
+    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.12), 0 0 14px rgba(139, 92, 246, 0.08) !important;
     outline: none !important;
     background: var(--surface-2) !important;
+}
+
+div[data-testid="stTextInput"] input,
+div[data-testid="stTextArea"] textarea,
+div[data-testid="stNumberInput"] input,
+div[data-testid="stDateInput"] input,
+div[data-testid="stTimeInput"] input {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.035), var(--surface-input)) !important;
+}
+
+div[data-testid="stTextInput"]:hover input,
+div[data-testid="stTextArea"]:hover textarea,
+div[data-testid="stNumberInput"]:hover input,
+div[data-testid="stDateInput"]:hover input,
+div[data-testid="stTimeInput"]:hover input {
+    border-color: rgba(167, 139, 250, 0.38) !important;
+}
+
+div[data-testid="stTextInput"]:focus-within input,
+div[data-testid="stTextArea"]:focus-within textarea,
+div[data-testid="stNumberInput"]:focus-within input,
+div[data-testid="stDateInput"]:focus-within input,
+div[data-testid="stTimeInput"]:focus-within input {
+    background: var(--surface-2) !important;
+    border-color: rgba(167, 139, 250, 0.58) !important;
+    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.12), 0 0 14px rgba(139, 92, 246, 0.08) !important;
+    outline: none !important;
 }
 
 [data-testid="stPills"] button,
@@ -2178,7 +2234,7 @@ textarea:focus {
     background: linear-gradient(135deg, var(--primary-1), var(--accent)) !important;
     border-color: transparent !important;
     color: #FFFFFF !important;
-    box-shadow: 0 4px 20px rgba(139, 92, 246, 0.5);
+    box-shadow: 0 3px 12px rgba(139, 92, 246, 0.2);
 }
 
 div.stButton > button {
@@ -2189,7 +2245,7 @@ div.stButton > button {
     font-size: 0.98rem;
     border-radius: 50px !important;
     padding: 0.8rem 2rem;
-    box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4), 0 0 40px rgba(139, 92, 246, 0.2);
+    box-shadow: 0 6px 18px rgba(139, 92, 246, 0.18);
     transition: all 0.3s ease;
     letter-spacing: 0.3px;
     position: relative;
@@ -2212,18 +2268,18 @@ div.stButton > button:hover::before {
 }
 
 div.stButton > button:hover {
-    filter: brightness(1.1);
-    transform: translateY(-3px);
-    box-shadow: 0 12px 35px rgba(139, 92, 246, 0.6), 0 0 50px rgba(139, 92, 246, 0.3);
+    filter: brightness(1.06);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(139, 92, 246, 0.24);
 }
 
 .artifact-shell {
-    background: linear-gradient(180deg, var(--surface-1), var(--surface-2));
+    background: linear-gradient(145deg, var(--surface-2), var(--surface-1));
     border: 1px solid var(--border-default);
     border-radius: 18px;
     padding: 1rem 1rem 0.9rem;
     margin: 0.75rem 0 1rem;
-    box-shadow: 0 10px 32px rgba(2, 6, 23, 0.18), 0 0 18px rgba(139, 92, 246, 0.12);
+    box-shadow: 0 8px 24px rgba(2, 6, 23, 0.16);
     position: relative;
     overflow: hidden;
 }
@@ -2234,7 +2290,7 @@ div.stButton > button:hover {
     inset: 0 auto auto 0;
     width: 100%;
     height: 2px;
-    background: linear-gradient(90deg, rgba(139, 92, 246, 1), rgba(168, 85, 247, 0.8), rgba(236, 72, 153, 0.8));
+    background: linear-gradient(90deg, rgba(139, 92, 246, 0.72), rgba(168, 85, 247, 0.48));
 }
 
 .artifact-header {
@@ -2285,23 +2341,22 @@ div.stButton > button:hover {
 }
 
 div[data-testid="stChatMessage"] {
-    background: rgba(15, 23, 42, 0.7);
-    border: 1px solid rgba(148, 163, 184, 0.14);
+    background: var(--surface-1);
+    border: 1px solid var(--border-default);
     border-radius: 16px;
     padding: 0.8rem 0.9rem;
-    box-shadow: 0 8px 24px rgba(2, 6, 23, 0.12);
+    box-shadow: 0 4px 14px rgba(2, 6, 23, 0.12);
 }
 
 .premium-card {
-    background: var(--card-bg);
+    background: var(--surface-1);
     border-radius: 20px;
-    border: 1px solid var(--card-border);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 20px rgba(139, 92, 246, 0.1);
+    border: 1px solid var(--border-default);
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.18);
     padding: 28px;
     margin-bottom: 20px;
     transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     text-align: __ALIGN__;
-    backdrop-filter: blur(20px);
     position: relative;
     overflow: hidden;
 }
@@ -2323,9 +2378,9 @@ div[data-testid="stChatMessage"] {
 }
 
 .premium-card:hover {
-    transform: translateY(-8px);
-    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4), 0 0 30px rgba(139, 92, 246, 0.3);
-    border-color: var(--accent);
+    transform: translateY(-3px);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+    border-color: var(--primary-border);
 }
 
 .premium-card h3 {
@@ -2418,23 +2473,67 @@ div[data-testid="stChatMessage"] {
     background-clip: text;
 }
 
+.ts-workspace-header {
+    position: relative;
+    margin: 0 0 1.25rem;
+    padding: 1.35rem 1.5rem 1.3rem;
+    overflow: hidden;
+    text-align: __ALIGN__;
+    border: 1px solid var(--primary-border);
+    border-radius: 18px;
+    background: linear-gradient(120deg, rgba(139, 92, 246, 0.07), var(--surface-3) 42%, var(--surface-2));
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+
+.ts-workspace-header::before {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    width: 3px;
+    content: "";
+    background: linear-gradient(180deg, var(--primary-hover), rgba(139, 92, 246, 0.18));
+}
+
+.ts-workspace-header .ts-workspace-kicker {
+    margin: 0 0 0.45rem;
+    color: var(--primary-hover);
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+}
+
+.ts-workspace-header .ts-workspace-title {
+    margin: 0 0 0.4rem;
+    color: var(--text-primary);
+    font-size: clamp(1.55rem, 2.8vw, 2rem);
+    font-weight: 800;
+    line-height: 1.25;
+}
+
+.ts-workspace-header .ts-workspace-description {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.96rem;
+    line-height: 1.65;
+}
+
 .ts-section h2 {
     color: var(--text-primary) !important;
 }
 
 .ts-paywall {
-    background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(236, 72, 153, 0.15));
-    border: 2px solid var(--card-border);
+    background: linear-gradient(135deg, var(--primary-soft), rgba(168, 85, 247, 0.06));
+    border: 1px solid var(--primary-border);
     border-radius: 24px;
     padding: 4px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 40px rgba(139, 92, 246, 0.2);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
 }
 
 .ts-paywall-inner {
-    background: var(--surface-2);
+    background: var(--surface-1);
     border-radius: 20px;
     padding: 2.5rem;
-    backdrop-filter: blur(20px);
 }
 
 .ts-paywall h2 {
@@ -2486,13 +2585,12 @@ div[data-testid="stChatMessage"] {
 }
 
 .ts-pricing-card {
-    background: var(--card-bg);
-    border: 2px solid var(--card-border);
+    background: var(--surface-1);
+    border: 1px solid var(--card-border);
     border-radius: 24px;
     padding: 2.5rem;
     text-align: center;
     transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    backdrop-filter: blur(20px);
     position: relative;
     overflow: hidden;
 }
@@ -2514,19 +2612,18 @@ div[data-testid="stChatMessage"] {
 }
 
 .ts-pricing-card:hover {
-    transform: translateY(-10px);
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 40px rgba(139, 92, 246, 0.3);
-    border-color: var(--accent);
+    transform: translateY(-4px);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+    border-color: var(--primary-border);
 }
 
 .ts-pricing-card.featured {
-    border: 2px solid var(--accent);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 40px rgba(139, 92, 246, 0.4);
-    transform: scale(1.05);
+    border: 1px solid var(--primary-border);
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.2);
 }
 
 .ts-pricing-card.featured:hover {
-    transform: scale(1.05) translateY(-10px);
+    transform: translateY(-4px);
 }
 
 .ts-pricing-badge {
@@ -2605,10 +2702,9 @@ div[data-testid="stChatMessage"] {
     text-decoration: none;
     transition: all 0.3s ease;
     cursor: pointer;
-    border: 2px solid var(--card-border);
-    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid var(--card-border);
+    background: rgba(15, 23, 42, 0.7);
     color: var(--muted);
-    backdrop-filter: blur(10px);
 }
 
 .ts-pricing-btn:hover {
@@ -2621,13 +2717,13 @@ div[data-testid="stChatMessage"] {
     background: linear-gradient(135deg, var(--primary-1), var(--accent));
     border: none;
     color: white;
-    box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4);
+    box-shadow: 0 6px 18px rgba(139, 92, 246, 0.18);
 }
 
 .ts-pricing-btn.primary:hover {
-    filter: brightness(1.1);
-    transform: translateY(-3px);
-    box-shadow: 0 12px 35px rgba(139, 92, 246, 0.6);
+    filter: brightness(1.06);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(139, 92, 246, 0.24);
 }
 
 .ts-pricing-footer {
@@ -2646,12 +2742,11 @@ div[data-testid="stChatMessage"] {
 }
 
 .ts-script-result {
-    background: var(--card-bg);
-    border: 2px solid var(--card-border);
+    background: var(--surface-1);
+    border: 1px solid var(--card-border);
     border-radius: 20px;
     padding: 2rem;
     margin-top: 2rem;
-    backdrop-filter: blur(20px);
 }
 
 .ts-script-header {
@@ -2812,12 +2907,11 @@ div[data-testid="stChatMessage"] {
 }
 
 .ts-seo-result {
-    background: var(--card-bg);
-    border: 2px solid var(--card-border);
+    background: var(--surface-1);
+    border: 1px solid var(--card-border);
     border-radius: 20px;
     padding: 2rem;
     margin-top: 2rem;
-    backdrop-filter: blur(20px);
 }
 
 .ts-seo-header {
@@ -2837,7 +2931,7 @@ div[data-testid="stChatMessage"] {
 .ts-seo-section {
     margin-bottom: 2rem;
     padding: 1.5rem;
-    background: rgba(30, 41, 59, 0.4);
+    background: var(--surface-2);
     border: 1px solid var(--card-border);
     border-radius: 16px;
 }
@@ -3100,19 +3194,18 @@ div[data-testid="stChatMessage"] {
 }
 
 .ts-card {
-    background: var(--card-bg);
+    background: var(--surface-1);
     border-radius: 20px;
     border: 1px solid var(--card-border);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.18);
     padding: 24px;
     transition: all 0.3s ease;
-    backdrop-filter: blur(20px);
 }
 
 .ts-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4), 0 0 30px rgba(139, 92, 246, 0.2);
-    border-color: var(--accent);
+    transform: translateY(-3px);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+    border-color: var(--primary-border);
 }
 
 .ts-card .num {
@@ -3185,8 +3278,8 @@ div[data-testid="stChatMessage"] {
 }
 
 .ts-card.improved {
-    border: 2px solid var(--accent);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 30px rgba(139, 92, 246, 0.3);
+    border: 1px solid var(--primary-border);
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.2);
 }
 
 .ts-flag {
@@ -3253,12 +3346,18 @@ div[data-testid="stChatMessage"] {
 }
 
 .ts-input-container {
-    background: rgba(30, 41, 59, 0.4);
-    border: 1px solid var(--card-border);
-    border-radius: 20px;
-    padding: 2rem;
+    background: var(--surface-2);
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    border-radius: 16px;
+    padding: 1.25rem;
     margin-bottom: 1.5rem;
-    backdrop-filter: blur(10px);
+    box-shadow: 0 0 16px rgba(139, 92, 246, 0.06);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ts-input-container:focus-within {
+    border-color: rgba(167, 139, 250, 0.48);
+    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.1), 0 0 16px rgba(139, 92, 246, 0.08);
 }
 
 .ts-field-label {
@@ -3480,6 +3579,62 @@ def inject_custom_header() -> None:
             gap: 0.6rem;
         }}
 
+        @media (max-width: 760px) {{
+            .ts-topbar-shell {{
+                flex-wrap: wrap;
+                gap: 0.55rem 0.75rem;
+                padding: 0 1rem;
+            }}
+
+            .ts-brand-wrap {{
+                order: 1;
+                flex: 1 1 auto;
+            }}
+
+            .ts-topbar-actions {{
+                order: 2;
+                margin-inline-start: auto;
+            }}
+
+            .ts-topbar-nav {{
+                order: 3;
+                flex: 1 1 100%;
+                justify-content: flex-start;
+                gap: 1rem;
+                overflow-x: auto;
+                white-space: nowrap;
+                scrollbar-width: none;
+            }}
+
+            .ts-topbar-nav::-webkit-scrollbar {{
+                display: none;
+            }}
+        }}
+
+        @media (max-width: 420px) {{
+            .ts-topbar-shell {{
+                padding-inline: 0.7rem;
+            }}
+
+            .ts-brand-wrap {{
+                gap: 0.5rem;
+            }}
+
+            .ts-brand-text {{
+                font-size: 0.95rem;
+            }}
+
+            .ts-topbar-actions {{
+                gap: 0.35rem;
+            }}
+
+            .ts-pill-btn {{
+                min-height: 34px;
+                padding: 0.45rem 0.65rem;
+                font-size: 0.72rem;
+            }}
+        }}
+
         .ts-pill-btn {{
             display: inline-flex;
             align-items: center;
@@ -3576,9 +3731,32 @@ def inject_styles() -> None:
         .stTextArea > div > div > textarea {
             background: var(--surface-input) !important;
             color: var(--text-primary) !important;
-            border: 1px solid var(--border-default) !important;
+            border: 1px solid rgba(167, 139, 250, 0.24) !important;
             border-radius: 14px !important;
             box-shadow: none !important;
+        }
+
+        .stTextInput > div,
+        .stSelectbox > div,
+        .stTextArea > div {
+            background: transparent !important;
+        }
+
+        .stTextInput input:focus,
+        .stSelectbox input:focus,
+        .stTextArea textarea:focus,
+        div[data-testid="stTextInput"]:focus-within input,
+        div[data-testid="stTextArea"]:focus-within textarea,
+        div[data-testid="stNumberInput"]:focus-within input,
+        div[data-testid="stDateInput"]:focus-within input,
+        div[data-testid="stTimeInput"]:focus-within input {
+            border-color: rgba(167, 139, 250, 0.58) !important;
+            box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.12), 0 0 14px rgba(139, 92, 246, 0.08) !important;
+        }
+
+        .stTextInput input:hover,
+        .stTextArea textarea:hover {
+            border-color: rgba(167, 139, 250, 0.38) !important;
         }
 
         .stTextInput > div > div > input::placeholder,
@@ -3602,7 +3780,7 @@ def inject_styles() -> None:
 
         .stButton > button:hover {
             filter: brightness(1.04);
-            box-shadow: 0 12px 28px rgba(139, 92, 246, 0.22) !important;
+            box-shadow: 0 8px 20px rgba(139, 92, 246, 0.24) !important;
         }
 
         .ts-hero-actions a.ts-primary-btn {
@@ -3626,11 +3804,177 @@ def inject_styles() -> None:
         }
 
         .ts-tool-surface,
-        .ts-workspace-preview,
-        .ts-chat-shell,
         [data-testid="stChatMessage"] {
             background: var(--surface-1) !important;
             border-color: var(--border-default) !important;
+            box-shadow: 0 6px 22px rgba(0, 0, 0, 0.18) !important;
+        }
+
+        .ts-workspace-preview {
+            background: var(--surface-2) !important;
+            border-color: var(--border-default) !important;
+        }
+
+        .ts-chat-shell {
+            background: var(--surface-1) !important;
+            border-color: var(--border-default) !important;
+        }
+
+        .block-container {
+            width: 100%;
+            max-width: 1440px;
+            padding: clamp(1.25rem, 2.5vw, 2.25rem) clamp(1rem, 3vw, 2.5rem) 3rem;
+        }
+
+        .st-key-app_toolbar [data-testid="stHorizontalBlock"] {
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .st-key-app_toolbar [data-testid="stColumn"] {
+            min-width: 0;
+        }
+
+        .st-key-app_navigation {
+            position: sticky;
+            top: 1rem;
+            min-height: fit-content;
+            padding: 1.1rem;
+            border: 1px solid rgba(167, 139, 250, 0.18);
+            border-radius: 18px;
+            background: linear-gradient(155deg, rgba(32, 45, 67, 0.94), rgba(18, 26, 41, 0.96));
+            box-shadow: 0 12px 32px rgba(2, 6, 23, 0.2), 0 0 22px rgba(139, 92, 246, 0.035);
+        }
+
+        .st-key-app_navigation h3 {
+            margin: 0.25rem 0 0.9rem;
+            font-size: 1.05rem;
+            letter-spacing: 0.01em;
+        }
+
+        .st-key-app_navigation hr {
+            margin: 0.85rem 0;
+            border-color: rgba(148, 163, 184, 0.12);
+        }
+
+        .st-key-app_navigation .stButton > button {
+            width: 100% !important;
+            min-height: 44px !important;
+            justify-content: flex-start !important;
+            text-align: start !important;
+            padding-inline: 0.9rem !important;
+            border: 1px solid transparent !important;
+            border-radius: 11px !important;
+            background: transparent !important;
+            color: var(--text-secondary) !important;
+            box-shadow: none !important;
+            transform: none !important;
+        }
+
+        .st-key-app_navigation .stButton > button:hover {
+            background: rgba(139, 92, 246, 0.09) !important;
+            border-color: rgba(167, 139, 250, 0.18) !important;
+            color: var(--text-primary) !important;
+            filter: none;
+            box-shadow: none !important;
+        }
+
+        .st-key-app_navigation .stButton > button[kind="primary"] {
+            background: linear-gradient(110deg, rgba(139, 92, 246, 0.2), rgba(168, 85, 247, 0.1)) !important;
+            border-color: rgba(167, 139, 250, 0.3) !important;
+            border-inline-start: 3px solid rgba(167, 139, 250, 0.85) !important;
+            color: #F5F3FF !important;
+            box-shadow: none !important;
+        }
+
+        .st-key-app_navigation .stButton > button[kind="primary"]:hover {
+            background: linear-gradient(110deg, rgba(139, 92, 246, 0.25), rgba(168, 85, 247, 0.13)) !important;
+            border-color: rgba(167, 139, 250, 0.4) !important;
+        }
+
+        .st-key-lang {
+            width: 100%;
+        }
+
+        .st-key-lang [role="radiogroup"] {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 0.35rem;
+        }
+
+        .st-key-lang [role="radiogroup"] button {
+            min-height: 36px;
+            padding: 0.35rem 0.7rem;
+            white-space: nowrap;
+        }
+
+        .stApp:has(#home) .premium-card,
+        .stApp:has(#home) .ts-pricing-card,
+        .stApp:has(#home) .ts-proof,
+        .stApp:has(#home) .ts-pricing-footer,
+        .stApp:has(#home) .ts-footer,
+        .stApp:has(#home) .ts-tool-surface {
+            border-color: rgba(167, 139, 250, 0.18);
+            box-shadow: 0 10px 28px rgba(2, 6, 23, 0.16), 0 0 22px rgba(139, 92, 246, 0.045);
+        }
+
+        .stApp:has(#home) .premium-card {
+            padding: clamp(1.2rem, 2vw, 1.7rem) !important;
+            background: linear-gradient(145deg, rgba(32, 45, 67, 0.92), rgba(18, 26, 41, 0.96));
+        }
+
+        .stApp:has(#home) .premium-card::before {
+            opacity: 0.22;
+        }
+
+        .stApp:has(#home) .premium-card:hover {
+            border-color: rgba(167, 139, 250, 0.32);
+            box-shadow: 0 12px 30px rgba(2, 6, 23, 0.18), 0 0 24px rgba(139, 92, 246, 0.065);
+        }
+
+        .stApp:has(#home) .ts-pricing-card {
+            padding: clamp(1.5rem, 2.5vw, 2.25rem);
+            background: linear-gradient(155deg, rgba(32, 45, 67, 0.92), rgba(18, 26, 41, 0.96));
+        }
+
+        .stApp:has(#home) .ts-pricing-card.featured {
+            border-color: rgba(167, 139, 250, 0.34);
+            box-shadow: 0 12px 30px rgba(2, 6, 23, 0.18), 0 0 24px rgba(139, 92, 246, 0.07);
+        }
+
+        .stApp:has(#home) .ts-proof,
+        .stApp:has(#home) .ts-pricing-footer {
+            padding: 1.1rem 1.35rem;
+            background: linear-gradient(120deg, rgba(32, 45, 67, 0.72), rgba(25, 36, 56, 0.68));
+        }
+
+        .stApp:has(#home) .ts-tool-surface {
+            background: linear-gradient(145deg, rgba(32, 45, 67, 0.94), rgba(18, 26, 41, 0.98)) !important;
+            padding: 1.35rem;
+        }
+
+        .stApp:has(#home) .ts-workspace-preview {
+            padding: clamp(1.2rem, 2.2vw, 1.8rem);
+        }
+
+        .stApp:has(#home) .ts-footer {
+            padding-block: 2.5rem;
+            background: linear-gradient(180deg, rgba(25, 36, 56, 0.68), rgba(18, 26, 41, 0.76));
+        }
+
+        .stApp:has(#home) .ts-footer-content,
+        .stApp:has(#home) .ts-footer-bottom {
+            padding-inline: clamp(1rem, 3vw, 2rem);
+        }
+
+        .stApp:has(#home) .ts-footer-brand p,
+        .stApp:has(#home) .ts-footer-bottom p {
+            line-height: 1.7;
+        }
+
+        .st-key-app_workspace {
+            min-width: 0;
         }
 
         [data-testid="stSidebarCollapsedControl"] {
@@ -3664,6 +4008,57 @@ def inject_styles() -> None:
             background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(168, 85, 247, 0.18)) !important;
             border-color: rgba(139, 92, 246, 0.35) !important;
             box-shadow: 0 10px 24px rgba(124, 58, 237, 0.18) !important;
+        }
+
+        @media (max-width: 1100px) {
+            .st-key-app_navigation {
+                padding: 0.85rem;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .block-container {
+                padding: 1rem 0.9rem 2rem;
+            }
+
+            .st-key-app_navigation {
+                position: static;
+                min-height: 0;
+                margin-bottom: 0.75rem;
+            }
+
+            .st-key-lang [role="radiogroup"] {
+                justify-content: flex-start;
+            }
+
+            .stApp:has(#home) .ts-pricing-grid {
+                gap: 1rem;
+            }
+
+            .stApp:has(#home) .ts-proof {
+                display: flex;
+                flex-direction: column;
+                gap: 0.35rem;
+            }
+        }
+
+        @media (max-width: 520px) {
+            .block-container {
+                padding: 0.75rem 0.65rem 1.5rem;
+            }
+
+            .stApp:has(#home) .ts-pricing-card {
+                padding: 1.35rem 1.1rem;
+            }
+
+            .stApp:has(#home) .ts-footer-content,
+            .stApp:has(#home) .ts-footer-bottom {
+                padding-inline: 0.75rem;
+            }
+
+            .st-key-app_navigation .stButton > button {
+                min-height: 42px !important;
+            }
         }
 
         .ts-shell {
@@ -3777,10 +4172,10 @@ def inject_styles() -> None:
         }
 
         .ts-tool-surface {
-            background: rgba(15, 23, 42, 0.8);
-            border: 1px solid rgba(148, 163, 184, 0.14);
+            background: var(--surface-1);
+            border: 1px solid var(--border-default);
             border-radius: 22px;
-            box-shadow: 0 16px 36px rgba(2, 6, 23, 0.22);
+            box-shadow: 0 8px 24px rgba(2, 6, 23, 0.16);
             overflow: hidden;
             min-height: 100%;
         }
@@ -3788,9 +4183,9 @@ def inject_styles() -> None:
         .ts-workspace-preview {
             padding: 1rem;
             border-radius: 20px;
-            background: rgba(15, 23, 42, 0.72);
-            border: 1px solid rgba(148, 163, 184, 0.14);
-            box-shadow: 0 12px 28px rgba(2, 6, 23, 0.14);
+            background: var(--surface-2);
+            border: 1px solid var(--border-default);
+            box-shadow: 0 6px 18px rgba(2, 6, 23, 0.14);
         }
 
         .ts-workspace-kicker {
@@ -3843,7 +4238,7 @@ def inject_styles() -> None:
             flex-direction: column;
             gap: 0.75rem;
             padding: 1.15rem;
-            background: rgba(15, 23, 42, 0.88);
+            background: var(--surface-2);
             min-height: 100%;
         }
 
@@ -4332,7 +4727,7 @@ def render_ai_chat_panel() -> None:
                         st.session_state["active_workspace"] = "Visual Prompt Studio"
                     st.rerun()
 
-    action_cols = st.columns(4)
+    action_cols = st.columns(3)
     with action_cols[0]:
         if st.button("Use in Idea Generator", use_container_width=True):
             st.session_state["active_workspace"] = "Idea Generator"
@@ -4350,12 +4745,13 @@ def render_ai_chat_panel() -> None:
             st.session_state["active_workspace"] = "Script Writer"
             update_project_context(topic=ctx.get("topic") or ctx.get("idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
             st.rerun()
-    with action_cols[3]:
+    project_action_cols = st.columns(2)
+    with project_action_cols[0]:
         if st.button("Send to SEO Optimizer", use_container_width=True):
             st.session_state["active_workspace"] = "SEO Optimizer"
             update_project_context(topic=ctx.get("topic") or ctx.get("idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
             st.rerun()
-    with action_cols[3]:
+    with project_action_cols[1]:
         if st.button(t("workspace.save_to_project"), use_container_width=True):
             prompt = st.session_state.get("main_ai_copilot_input", "")
             if prompt.strip():
@@ -5048,13 +5444,13 @@ def normalize_duration_value(duration: str | None) -> str:
 
 
 def render_workspace_header(title: str, description: str) -> None:
-    """Reusable header for the app workspaces without decorative card wrappers."""
+    """Render a consistent, softly accented heading for each workspace."""
     st.markdown(
         f"""
-        <div style="margin: 0 0 1rem 0;">
-            <div style="font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: #C4B5FD; font-weight: 800; margin-bottom: 0.4rem;">{html_escape(t('workspace.label'))}</div>
-            <h3 style="margin: 0 0 0.35rem 0; font-size: clamp(1.8rem, 3vw, 2.3rem); color: #F8FAFC; font-weight: 800; line-height: 1.2;">{html_escape(title)}</h3>
-            <p style="margin: 0; color: #CBD5E1; line-height: 1.6;">{html_escape(description)}</p>
+        <div class="ts-workspace-header">
+            <div class="ts-workspace-kicker">{html_escape(t('workspace.label'))}</div>
+            <h3 class="ts-workspace-title">{html_escape(title)}</h3>
+            <p class="ts-workspace-description">{html_escape(description)}</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -5082,12 +5478,14 @@ def render_platform_picker(*, key: str = "project_platform_picker", default: str
 def render_landing_page() -> None:
     """Marketing landing page only; app navigation lives in the app shell."""
     st.markdown('<div id="home" class="ts-shell">', unsafe_allow_html=True)
-    landing_action_col, _ = st.columns([1, 1])
+    landing_action_col, language_col = st.columns([1, 1])
     with landing_action_col:
         if st.button(t("nav.open_app"), key="landing_open_app"):
             st.session_state["app_mode"] = "app"
             st.session_state["active_workspace"] = "AI Chat"
             st.rerun()
+    with language_col:
+        render_language_switcher()
 
     hero_col, tool_col = st.columns([1.18, 1.02], gap="large")
     with hero_col:
@@ -5122,30 +5520,31 @@ def render_landing_page() -> None:
 
 def render_app_navigation() -> None:
     """Custom sidebar navigation for the product workspaces without using the four primary workspaces as tabs."""
-    st.session_state.setdefault("active_workspace", "AI Chat")
-    workspace_labels = {
-        "AI Chat": t("workspace.ai_chat"),
-        "Idea Generator": t("workspace.idea_generator"),
-        "Idea Evaluator": t("workspace.idea_evaluator"),
-        "Script Writer": t("workspace.script_writer"),
-        "SEO Optimizer": t("workspace.seo_optimizer"),
-        "Visual Prompt Studio": t("workspace.visual_prompt_studio"),
-    }
-    st.markdown("### TubeSpark")
-    st.markdown("---")
-    for workspace in APP_WORKSPACES:
-        if st.button(
-            workspace_labels.get(workspace, workspace),
-            key=f"app_nav_{workspace}",
-            use_container_width=True,
-            type="primary" if st.session_state.get("active_workspace") == workspace else "secondary",
-        ):
-            st.session_state["active_workspace"] = workspace
+    with st.container(key="app_navigation"):
+        st.session_state.setdefault("active_workspace", "AI Chat")
+        workspace_labels = {
+            "AI Chat": t("workspace.ai_chat"),
+            "Idea Generator": t("workspace.idea_generator"),
+            "Idea Evaluator": t("workspace.idea_evaluator"),
+            "Script Writer": t("workspace.script_writer"),
+            "SEO Optimizer": t("workspace.seo_optimizer"),
+            "Visual Prompt Studio": t("workspace.visual_prompt_studio"),
+        }
+        st.markdown("### TubeSpark")
+        st.markdown("---")
+        for workspace in APP_WORKSPACES:
+            if st.button(
+                workspace_labels.get(workspace, workspace),
+                key=f"app_nav_{workspace}",
+                use_container_width=True,
+                type="primary" if st.session_state.get("active_workspace") == workspace else "secondary",
+            ):
+                st.session_state["active_workspace"] = workspace
+                st.rerun()
+        st.markdown("---")
+        if st.button(t("nav.back_to_landing"), key="app_back_to_landing", use_container_width=True):
+            st.session_state["app_mode"] = "landing"
             st.rerun()
-    st.markdown("---")
-    if st.button(t("nav.back_to_landing"), key="app_back_to_landing", use_container_width=True):
-        st.session_state["app_mode"] = "landing"
-        st.rerun()
 
 
 def render_ai_chat_workspace() -> None:
@@ -5631,25 +6030,26 @@ def render_app_shell() -> None:
     st.session_state.setdefault("app_sidebar_open", True)
     st.session_state.setdefault("active_workspace", "AI Chat")
 
-    left_col, middle_col, right_col = st.columns([0.08, 0.44, 0.48])
-    with left_col:
-        if st.button("☰", key="app_sidebar_toggle", help="Toggle sidebar", use_container_width=True):
-            st.session_state["app_sidebar_open"] = not st.session_state.get("app_sidebar_open", True)
-            st.rerun()
-    with middle_col:
-        current_workspace = st.session_state.get("active_workspace", "AI Chat")
-        st.markdown(
-            f"<div style='display:flex; align-items:center; height: 38px; color: #F8FAFC; font-size: 0.96rem; font-weight: 700; letter-spacing: 0.02em;'>{html_escape(current_workspace)}</div>",
-            unsafe_allow_html=True,
-        )
-    with right_col:
-        render_language_switcher()
+    with st.container(key="app_toolbar"):
+        left_col, middle_col, right_col = st.columns([0.08, 0.42, 0.5])
+        with left_col:
+            if st.button("☰", key="app_sidebar_toggle", help="Toggle sidebar", use_container_width=True):
+                st.session_state["app_sidebar_open"] = not st.session_state.get("app_sidebar_open", True)
+                st.rerun()
+        with middle_col:
+            current_workspace = st.session_state.get("active_workspace", "AI Chat")
+            st.markdown(
+                f"<div style='display:flex; align-items:center; min-height: 38px; color: #F8FAFC; font-size: 0.96rem; font-weight: 700; letter-spacing: 0.02em;'>{html_escape(current_workspace)}</div>",
+                unsafe_allow_html=True,
+            )
+        with right_col:
+            render_language_switcher()
 
     if st.session_state.get("app_sidebar_open", True):
-        sidebar_col, main_col = st.columns([0.24, 0.76])
+        sidebar_col, main_col = st.columns([0.28, 0.72], gap="medium")
         with sidebar_col:
             render_app_navigation()
-        with main_col:
+        with main_col, st.container(key="app_workspace"):
             workspace = st.session_state.get("active_workspace", "AI Chat")
             if workspace == "AI Chat":
                 render_ai_chat_workspace()
@@ -5664,19 +6064,20 @@ def render_app_shell() -> None:
             elif workspace == "Visual Prompt Studio":
                 render_visual_prompt_studio_workspace()
     else:
-        workspace = st.session_state.get("active_workspace", "AI Chat")
-        if workspace == "AI Chat":
-            render_ai_chat_workspace()
-        elif workspace == "Idea Generator":
-            render_idea_generator_workspace()
-        elif workspace == "Idea Evaluator":
-            render_idea_evaluator_workspace()
-        elif workspace == "Script Writer":
-            render_script_writer_workspace()
-        elif workspace == "SEO Optimizer":
-            render_seo_workspace()
-        elif workspace == "Visual Prompt Studio":
-            render_visual_prompt_studio_workspace()
+        with st.container(key="app_workspace"):
+            workspace = st.session_state.get("active_workspace", "AI Chat")
+            if workspace == "AI Chat":
+                render_ai_chat_workspace()
+            elif workspace == "Idea Generator":
+                render_idea_generator_workspace()
+            elif workspace == "Idea Evaluator":
+                render_idea_evaluator_workspace()
+            elif workspace == "Script Writer":
+                render_script_writer_workspace()
+            elif workspace == "SEO Optimizer":
+                render_seo_workspace()
+            elif workspace == "Visual Prompt Studio":
+                render_visual_prompt_studio_workspace()
 
 
 def render_workspace_layout() -> None:
