@@ -623,9 +623,11 @@ Reply with one valid JSON object using exactly this shape:
 "improved": {{"title": "...", "hook": "...", "value": "..."}}, "improved_score": 0}}"""
 
 
-def _evaluation_user_prompt(text: str) -> str:
+def _evaluation_user_prompt(text: str, context: str = "") -> str:
+    context_section = f"\n\nEVALUATION CONTEXT\n{context}" if context.strip() else ""
     return f"""IDEA TO REVIEW
 {text}
+{context_section}
 
 Rate this idea, rewrite it stronger, and return the JSON object described in the system
 prompt."""
@@ -1059,8 +1061,8 @@ def _script_from_groq(
     )
 
 
-def _evaluation_from_groq(text: str, lang: str) -> Evaluation:
-    data = _groq_json(_evaluation_system_prompt(lang), _evaluation_user_prompt(text), temperature=0.6)
+def _evaluation_from_groq(text: str, lang: str, context: str = "") -> Evaluation:
+    data = _groq_json(_evaluation_system_prompt(lang), _evaluation_user_prompt(text, context), temperature=0.6)
 
     analysis = _model_text(data.get("analysis"), 600)
     if not analysis:
@@ -1803,7 +1805,7 @@ def _idea_core(text: str, limit: int = 55) -> str:
     return f"{trimmed}…"
 
 
-def _template_evaluation(text: str, lang: str) -> Evaluation:
+def _template_evaluation(text: str, lang: str, context: str = "") -> Evaluation:
     """Offline evaluator: heuristics used when Groq is unavailable.
 
     Scores length, a number, a question, a curiosity trigger and a concrete audience, then
@@ -1845,6 +1847,8 @@ def _template_evaluation(text: str, lang: str) -> Evaluation:
         analysis = t_for(lang, "eval.issues_prefix") + " ".join(f"• {issue}" for issue in issues[:3])
     else:
         analysis = t_for(lang, "eval.strong")
+    if context.strip():
+        analysis = f"{analysis}\n\n{t_for(lang, 'eval.context_considered')}: {context.strip()}"
 
     pattern = rng.choice(UPGRADE_PATTERNS[lang])
     return Evaluation(
@@ -1860,7 +1864,7 @@ def _template_evaluation(text: str, lang: str) -> Evaluation:
     )
 
 
-def evaluate_idea(text: str, lang: str | None = None) -> Evaluation:
+def evaluate_idea(text: str, lang: str | None = None, *, context: str = "") -> Evaluation:
     """Reviews a user idea with Groq, falling back to the local heuristics when it is down.
 
     `lang` decides the language of the critique and of the outline. Failures never raise: a
@@ -1874,7 +1878,7 @@ def evaluate_idea(text: str, lang: str | None = None) -> Evaluation:
     problem = _configure_groq()
     if problem is None:
         try:
-            result = _evaluation_from_groq(clean, lang)
+            result = _evaluation_from_groq(clean, lang, context)
         except Exception as exc:
             _set_ai_error(_classify_ai_error(exc), _ai_error_detail(exc))
         else:
@@ -1883,7 +1887,7 @@ def evaluate_idea(text: str, lang: str | None = None) -> Evaluation:
     else:
         _set_ai_error(problem)
 
-    return _template_evaluation(clean, lang)
+    return _template_evaluation(clean, lang, context)
 
 
 # --------------------------------------------------------------------------------------
@@ -2014,15 +2018,35 @@ def _seo_generation_inputs(
     niche: str,
     primary_keyword: str,
     audience: str,
+    platform: str = "",
 ) -> tuple[str, str]:
     topic = title.strip() or niche.strip() or primary_keyword.strip() or description.strip() or "topic"
     generation_context = [
+        f"Target platform: {platform.strip()}" if platform.strip() else "",
         f"Niche / category: {niche.strip()}" if niche.strip() else "",
         f"Existing description: {description.strip()}" if description.strip() else "",
         f"Primary keyword: {primary_keyword.strip()}" if primary_keyword.strip() else "",
         f"Target audience: {audience.strip()}" if audience.strip() else "",
     ]
     return topic, "\n".join(part for part in generation_context if part) or "content"
+
+
+def _evaluation_generation_context(
+    *,
+    platform: str,
+    audience: str,
+    niche: str,
+    content_type: str,
+    title: str,
+) -> str:
+    fields = (
+        ("Platform", platform),
+        ("Audience", audience),
+        ("Niche", niche),
+        ("Content type", content_type),
+        ("Requested title", title),
+    )
+    return "\n".join(f"{label}: {value.strip()}" for label, value in fields if value.strip())
 
 
 def _render_seo_title_suggestions(data: SEOData) -> None:
@@ -2033,6 +2057,107 @@ def _render_seo_title_suggestions(data: SEOData) -> None:
         if titles:
             st.markdown(f"#### {heading}")
             st.markdown("\n".join(f"- {html_escape(title)}" for title in titles))
+
+
+def _render_idea_result(
+    ideas: list[Idea],
+    niche: str,
+    *,
+    platform: str,
+    details: dict[str, str] | None = None,
+) -> None:
+    with st.container(border=True):
+        st.markdown(f"### {t('result.ideas')}")
+        if details:
+            visible_details = [
+                f"{t(f'result.{key}')}: {LANGUAGE_LABELS.get(value, value) if key == 'language' else value}"
+                for key, value in details.items()
+                if value and key in {"platform", "audience", "duration", "content_type", "language"}
+            ]
+            if visible_details:
+                st.caption(" · ".join(visible_details))
+        render_idea_cards(ideas, niche, platform=platform)
+
+
+def _render_script_result(result: Script, *, details: dict[str, str] | None = None) -> None:
+    with st.container(border=True):
+        st.markdown(f"### {t('result.script')}")
+        st.markdown(f"#### {html_escape(result.title)}", unsafe_allow_html=True)
+        if details:
+            visible_details = [
+                f"{t(f'result.{key}')}: {value}"
+                for key, value in details.items()
+                if value and key in {"platform", "audience", "duration", "content_type", "style", "language"}
+            ]
+            if visible_details:
+                st.caption(" · ".join(visible_details))
+
+        if result.description:
+            render_artifact_card(t("result.description"), result.description, badge=t("result.description"))
+        if result.sections:
+            st.markdown(f"#### {t('result.sections')}")
+            for idx, section in enumerate(result.sections, start=1):
+                section_name = section.get("name") or f"Section {idx}"
+                content = section.get("content") or ""
+                notes = section.get("notes") or ""
+                body = "\n\n".join(part for part in (content, notes) if part)
+                render_artifact_card(
+                    section_name,
+                    body,
+                    badge=section.get("time") or f"#{idx}",
+                    meta=t("result.sections"),
+                )
+        if result.keywords:
+            st.markdown(f"#### {t('result.keywords')}")
+            st.markdown(_render_chip_row(result.keywords, limit=8), unsafe_allow_html=True)
+        if result.hashtags:
+            st.markdown(f"#### {t('result.hashtags')}")
+            st.markdown(_render_chip_row(result.hashtags, limit=15), unsafe_allow_html=True)
+
+
+def _render_seo_result(data: SEOData, *, details: dict[str, str] | None = None) -> None:
+    with st.container(border=True):
+        st.markdown(f"### {t('result.seo')}")
+        if details:
+            labels = (
+                ("topic", t("result.topic")),
+                ("niche", t("result.niche")),
+                ("platform", t("result.platform")),
+            )
+            visible_details = [f"{label}: {details[key]}" for key, label in labels if details.get(key)]
+            if visible_details:
+                st.caption(" · ".join(visible_details))
+        if data.seo_description:
+            render_artifact_card(
+                t("result.description"),
+                data.seo_description,
+                badge=t("result.description"),
+                meta="SEO",
+            )
+        _render_seo_title_suggestions(data)
+        if data.seo_tags:
+            st.markdown(f"#### {t('result.keywords')}")
+            st.markdown(_render_chip_row(data.seo_tags, limit=12), unsafe_allow_html=True)
+        if data.chapters:
+            st.markdown(f"#### {t('result.chapters')}")
+            for idx, chapter in enumerate(data.chapters, start=1):
+                render_artifact_card(
+                    f"#{idx}",
+                    chapter,
+                    badge=t("result.chapters"),
+                    meta=t("result.chapters"),
+                )
+        if data.thumbnail_texts:
+            st.markdown(f"#### {t('result.thumbnail_texts')}")
+            st.markdown(_render_chip_row(data.thumbnail_texts, limit=8), unsafe_allow_html=True)
+
+
+def _render_visual_result(title: str, body: str, *, meta: str = "") -> None:
+    if not body:
+        return
+    with st.container(border=True):
+        st.markdown(f"### {t('result.visual')}")
+        render_artifact_card(title, body, badge=title, meta=meta)
 
 
 def render_artifact_card(title: str, body: str, *, badge: str = "Artifact", meta: str = "") -> None:
@@ -4512,19 +4637,18 @@ def _extract_topic_from_prompt(prompt: str) -> str:
     if not text:
         return ""
     lower = text.lower()
-    for marker in ("about ", "on ", "for ", "regarding ", "about:", "topic:"):
+    for marker in ("about ", "on ", "for ", "regarding ", "about:", "topic:", "sur ", "à propos de ", "sur:", "عن ", "حول ", "موضوع:"):
         idx = lower.find(marker)
         if idx != -1:
             candidate = text[idx + len(marker):].strip()
             candidate = candidate.strip("\"'`")
             if candidate:
                 return candidate
-    if "i want to create content about" in lower:
-        return text.split("about", 1)[1].strip(" \"'")
     phrases = ["create ", "write ", "make ", "build ", "generate "]
     for phrase in phrases:
         if phrase in lower:
-            rest = text.lower().split(phrase, 1)[1].strip()
+            start = lower.find(phrase) + len(phrase)
+            rest = text[start:].strip()
             if rest:
                 return rest[:120]
     return text[:120]
@@ -4535,8 +4659,10 @@ def _detect_platform(prompt: str, fallback: str = DEFAULT_PLATFORM) -> str:
     text = (prompt or "").lower()
     platform_map = {
         "youtube": "YouTube",
+        "يوتيوب": "YouTube",
         "shorts": "YouTube Shorts",
         "tiktok": "TikTok",
+        "تيك توك": "TikTok",
         "reels": "Instagram Reels",
         "instagram": "Instagram",
         "facebook": "Facebook",
@@ -4558,15 +4684,34 @@ def _detect_content_type(prompt: str, fallback: str = "video") -> str:
     mapping = {
         "seo": "seo",
         "keyword": "seo",
+        "mots-clés": "seo",
+        "référencement": "seo",
         "search": "seo",
+        "سيو": "seo",
+        "كلمات مفتاحية": "seo",
         "thumbnail": "thumbnail",
+        "miniature": "thumbnail",
+        "صورة مصغرة": "thumbnail",
         "visual": "visual",
+        "visuel": "visual",
+        "مرئي": "visual",
         "script": "script",
+        "سكريبت": "script",
+        "سيناريو": "script",
         "title": "title",
+        "titre": "title",
+        "عنوان": "title",
         "idea": "idea",
+        "idée": "idea",
+        "فكرة": "idea",
         "hook": "idea",
         "description": "description",
         "hashtag": "hashtags",
+        "podcast": "podcast",
+        "بودكاست": "podcast",
+        "guide": "guide",
+        "short": "short",
+        "series": "series",
     }
     for key, value in mapping.items():
         if key in text:
@@ -4602,47 +4747,85 @@ def _apply_prompt_to_project_context(prompt: str) -> dict[str, Any]:
 
 
 def _chat_orchestrator(prompt: str, lang: str) -> str:
-    """A simple orchestrator that reads the current project context and routes the request to the right existing function when the user makes a clear intent request."""
+    """Route a chat request through the existing generators and retain its structured result."""
     cleaned = (prompt or "").strip()
     if not cleaned:
         return "Please tell me what you want to create."
 
+    lang = lang if lang in SUPPORTED_LANGUAGES else current_lang()
+    st.session_state.pop("chat_output", None)
     ctx = ensure_project_context()
     parsed = _apply_prompt_to_project_context(cleaned)
     lower = cleaned.lower()
     topic = parsed.get("topic") or ctx.get("topic") or ctx.get("idea") or ""
     platform = parsed.get("platform") or ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM
     niche = ctx.get("topic") or ctx.get("idea") or topic or "general"
+    duration = _chat_requested_duration(cleaned, ctx.get("duration") or "3-5min")
+    audience = _chat_requested_audience(cleaned, ctx.get("audience") or "")
+    vibe = _chat_requested_vibe(cleaned, ctx.get("vibe") or "professional")
+    update_project_context(audience=audience or None, duration=duration, vibe=vibe)
+    ctx = ensure_project_context()
 
-    if any(word in lower for word in ("seo", "keyword", "keywords", "search")):
+    def includes(*terms: str) -> bool:
+        return any(term in lower for term in terms)
+
+    def answer(en: str, ar: str, fr: str) -> str:
+        return {"en": en, "ar": ar, "fr": fr}[lang]
+
+    if includes("seo", "keyword", "keywords", "search", "mots-clés", "référencement", "سيو", "كلمات مفتاحية"):
         if topic:
-            result = _seo_from_groq(topic, niche, lang=current_lang())
+            _, seo_context = _seo_generation_inputs(
+                title=ctx.get("selected_title") or "",
+                description=ctx.get("description") or ctx.get("seo") or "",
+                niche=niche,
+                primary_keyword=(ctx.get("keywords") or [""])[0] if ctx.get("keywords") else "",
+                audience=audience,
+                platform=platform,
+            )
+            seo_context = f"{seo_context}\nUser request: {cleaned}"
+            result = _seo_from_groq(topic, seo_context, lang=lang)
             update_project_context(topic=topic, platform=platform, content_type="seo", seo=result.seo_description, keywords=list(result.seo_tags))
             st.session_state["seo_result"] = result
-            return (
-                "I used the current project context and generated SEO for the active topic. "
-                "It is now saved in the project context and ready to use in the SEO workspace."
-                if lang == "en"
-                else "استخدمت سياق المشروع الحالي وولّدت تحسين SEO للموضوع النشط. تم حفظه الآن في سياق المشروع وهو جاهز للاستخدام في مساحة SEO."
-                if lang == "ar"
-                else "J’ai utilisé le contexte du projet actuel pour générer le SEO du sujet actif. Il est maintenant enregistré dans le contexte du projet et prêt à être utilisé dans l’espace SEO."
+            st.session_state["chat_output"] = {"kind": "seo", "request": cleaned, "data": result, "context": {"topic": topic, "niche": niche, "platform": platform}}
+            return answer(
+                "SEO was generated for the current topic. The complete result is shown below and saved to the project.",
+                "تم إنشاء نتائج تحسين محركات البحث للموضوع الحالي. تظهر النتيجة كاملة أدناه وحُفظت في المشروع.",
+                "Le SEO a été généré pour le sujet actuel. Le résultat complet est affiché ci-dessous et enregistré dans le projet.",
             )
-        return "I need a topic in the project context before I can generate SEO."
+        return answer(
+            "I need a topic in the project context before I can generate SEO.",
+            "أحتاج إلى موضوع في سياق المشروع قبل إنشاء نتائج SEO.",
+            "J'ai besoin d'un sujet dans le contexte du projet pour générer le SEO.",
+        )
 
-    if any(word in lower for word in ("script", "voiceover", "narration")):
+    if includes("script", "voiceover", "narration", "scénario", "voix off", "سكريبت", "سيناريو"):
         idea = ctx.get("idea") or ctx.get("project_idea") or topic or ""
         if not idea:
-            return "I need an idea or topic in the project context before generating a script."
+            return answer(
+                "I need an idea or topic in the project context before generating a script.",
+                "أحتاج إلى فكرة أو موضوع في سياق المشروع قبل إنشاء السكريبت.",
+                "J'ai besoin d'une idée ou d'un sujet dans le contexte du projet avant de rédiger un script.",
+            )
+        script_brief = f"{idea}\nUser request: {cleaned}"
+        script_audience = audience or "general viewers"
         script = _script_from_groq(
             niche,
-            idea,
+            script_brief,
             platform=platform,
-            vibe="professional",
-            audience="general viewers",
-            lang=current_lang(),
-            duration="3-5min",
+            vibe=vibe,
+            audience=script_audience,
+            lang=lang,
+            duration=duration,
         )
         st.session_state["script_result"] = script
+        st.session_state["script_result_context"] = {
+            "platform": platform,
+            "audience": script_audience,
+            "duration": duration,
+            "style": vibe,
+            "content_type": parsed.get("content_type") or ctx.get("content_type") or "video",
+            "language": lang,
+        }
         update_project_context(
             topic=topic or idea,
             idea=idea,
@@ -4653,28 +4836,107 @@ def _chat_orchestrator(prompt: str, lang: str) -> str:
             hashtags=list(script.hashtags),
             keywords=list(script.keywords),
         )
-        return "I generated a script using the current idea and saved it into the shared project context."
+        st.session_state["chat_output"] = {"kind": "script", "request": cleaned, "data": script}
+        return answer(
+            "The script is ready. Its description, sections, keywords, and hashtags are shown below.",
+            "السكريبت جاهز. يظهر أدناه الوصف والأقسام والكلمات المفتاحية والوسوم.",
+            "Le script est prêt. Sa description, ses sections, ses mots-clés et ses hashtags sont affichés ci-dessous.",
+        )
 
-    if any(word in lower for word in ("title", "headline", "idea")) and any(word in lower for word in ("generate", "create", "make", "write")):
-        ideas = generate_ideas(topic or niche, 3, platform=platform, lang=current_lang())
+    if includes("evaluate", "evaluation", "analyze", "analyse", "analysis", "score", "évaluer", "évalue", "analyse", "analyser", "تقييم", "قيّم", "حلل", "تحليل"):
+        idea = ctx.get("selected_title") or ctx.get("idea") or topic
+        if idea:
+            evaluation_context = "\n".join(
+                value for value in (
+                    f"User request: {cleaned}",
+                    f"Platform: {platform}",
+                    f"Audience: {audience}",
+                    f"Content type: {ctx.get('content_type') or ''}",
+                ) if value.split(": ", 1)[-1].strip()
+            )
+            result = evaluate_idea(idea, lang=lang, context=evaluation_context)
+            st.session_state["idea_eval_result"] = result
+            st.session_state["chat_output"] = {
+                "kind": "evaluation",
+                "request": cleaned,
+                "data": result,
+                "original": idea,
+                "context": {
+                    "platform": platform,
+                    "audience": audience,
+                    "niche": ctx.get("topic") or "",
+                    "content_type": ctx.get("content_type") or "",
+                    "title": ctx.get("selected_title") or "",
+                },
+            }
+            update_project_context(evaluation=result.analysis, content_type="evaluation", platform=platform)
+            return answer(
+                "The idea was evaluated. Scores, analysis, and the improved version are shown below.",
+                "تم تقييم الفكرة. تظهر أدناه الدرجات والتحليل والنسخة المحسّنة.",
+                "L'idée a été évaluée. Les scores, l'analyse et la version améliorée sont affichés ci-dessous.",
+            )
+
+    if includes("thumbnail", "visual", "cover", "design", "image", "miniature", "visuel", "صورة مصغرة", "مرئي"):
+        visual_prompt = (
+            f"Create a {platform} visual concept for '{topic or ctx.get('topic') or 'the selected topic'}'. "
+            f"User direction: {cleaned}. Use a clear focal point, readable typography, and a strong hook."
+        )
+        update_project_context(topic=topic or ctx.get("topic"), platform=platform, content_type="visual", visual_direction=visual_prompt)
+        st.session_state["thumbnail_prompt"] = visual_prompt
+        st.session_state["chat_output"] = {"kind": "visual", "request": cleaned, "data": visual_prompt}
+        return answer(
+            "The visual direction is ready and shown below.",
+            "التوجيه المرئي جاهز ويظهر أدناه.",
+            "La direction visuelle est prête et affichée ci-dessous.",
+        )
+
+    if includes("idea", "ideas", "title", "titles", "headline", "idée", "idées", "titre", "titres", "فكرة", "أفكار", "عنوان", "عناوين"):
+        ideas = generate_ideas(
+            topic or niche,
+            3,
+            platform=platform,
+            vibe=cleaned,
+            audience=audience,
+            lang=lang,
+            duration=duration,
+        )
         titles = [idea.title for idea in ideas]
-        update_project_context(topic=topic or niche, idea=titles[0] if titles else topic or niche, titles=titles, selected_title=titles[0] if titles else "", content_type="idea")
+        update_project_context(topic=topic or niche, idea=titles[0] if titles else topic or niche, titles=titles, selected_title=titles[0] if titles else "", content_type="idea", platform=platform)
         st.session_state["ideas"] = ideas
         st.session_state["ideas_niche"] = topic or niche
-        return "I generated several title/idea options using the current project context and saved them in the project."
-
-    if any(word in lower for word in ("thumbnail", "visual", "cover", "design")):
-        prompt = (
-            f"Create a cinematic thumbnail concept for '{topic or ctx.get('topic') or 'the selected topic'}' "
-            f"for {platform}. Use high-contrast layout, readable typography, and a strong curiosity hook."
+        st.session_state["ideas_generation_context"] = {
+            "platform": platform,
+            "audience": ctx.get("audience") or "",
+            "duration": duration,
+        }
+        st.session_state["chat_output"] = {
+            "kind": "ideas",
+            "request": cleaned,
+            "data": ideas,
+            "topic": topic or niche,
+            "platform": platform,
+            "details": {
+                "platform": platform,
+                "audience": audience,
+                "duration": duration,
+                "content_type": ctx.get("content_type") or "video",
+                "language": lang,
+            },
+        }
+        return answer(
+            "Ideas were generated for the current topic and are shown below.",
+            "تم إنشاء أفكار للموضوع الحالي وتظهر أدناه.",
+            "Des idées ont été générées pour le sujet actuel et sont affichées ci-dessous.",
         )
-        update_project_context(topic=topic or ctx.get("topic"), platform=platform, content_type="visual", visual_direction=prompt)
-        st.session_state["thumbnail_prompt"] = prompt
-        return "I created a visual direction for the current topic and saved it to the project context."
 
     # Default: project-context read + update only. No regeneration unless user explicitly requests a specific asset.
     if topic:
         update_project_context(topic=topic, platform=platform, content_type=parsed.get("content_type") or ctx.get("content_type") or "video")
+        st.session_state["chat_output"] = {
+            "kind": "context",
+            "request": cleaned,
+            "data": {"topic": topic, "platform": platform, "content_type": parsed.get("content_type") or ctx.get("content_type") or "video"},
+        }
         return (
             f"I understood the project as: topic='{topic}', platform='{platform}'. I updated the current project context without regenerating the full workflow."
             if lang == "en"
@@ -4686,6 +4948,55 @@ def _chat_orchestrator(prompt: str, lang: str) -> str:
     return "I can use the current project context, but I need either a topic or an active idea before I can route the request."
 
 
+def _chat_requested_duration(prompt: str, fallback: str) -> str:
+    lower = (prompt or "").lower()
+    if any(token in lower for token in ("shorts", "short-form", "شورتس")):
+        return "shorts"
+    match = re.search(r"\b(3\s*[-–]\s*5|8\s*[-–]\s*10|15\+?)\s*(?:min(?:ute)?s?)\b", lower)
+    if match:
+        selected = match.group(1).replace(" ", "")
+        if selected == "15":
+            selected = "15+"
+        return normalize_duration_value(selected + "min")
+    if re.search(r"\b8\s+minutes?\b", lower):
+        return "8-10min"
+    if re.search(r"\b3\s+minutes?\b", lower):
+        return "3-5min"
+    return normalize_duration_value(fallback)
+
+
+def _chat_requested_audience(prompt: str, fallback: str = "") -> str:
+    text = (prompt or "").strip()
+    patterns = (
+        r"(?:target audience|audience)\s*:\s*([^,;\n.]+)",
+        r"\bfor\s+(.+?)(?=\s+(?:about|on|regarding)\s+|\s+\d+\s*(?:minutes?|mins?)\b|[,;\n.]|$)",
+        r"\bpour\s+(.+?)(?=\s+sur\s+|[,;\n.]|$)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            audience = match.group(1).strip()
+            if audience:
+                return audience
+    arabic = re.search(r"(?:للجمهور|الجمهور|لـ)\s*[:：]?\s*([^،؛\n.]+)", text)
+    return arabic.group(1).strip() if arabic else fallback
+
+
+def _chat_requested_vibe(prompt: str, fallback: str = "professional") -> str:
+    text = (prompt or "").lower()
+    vibes = (
+        (("casual", "relaxed", "décontracté", "خفيف", "عفوي"), "casual"),
+        (("educational", "pedagogical", "pédagogique", "تعليمي"), "educational"),
+        (("story-driven", "storytelling", "narrative", "narratif", "قصصي"), "story-driven"),
+        (("energetic", "dynamic", "dynamique", "حماسي"), "energetic"),
+        (("professional", "professionnel", "احترافي"), "professional"),
+    )
+    for tokens, vibe in vibes:
+        if any(token in text for token in tokens):
+            return vibe
+    return fallback
+
+
 def _copilot_reply(prompt: str, lang: str) -> str:
     """Backwards-compatible Copilot response that routes through the project-aware orchestration logic."""
     cleaned = (prompt or "").strip()
@@ -4693,6 +5004,107 @@ def _copilot_reply(prompt: str, lang: str) -> str:
         return "Please tell me what you want to create."
 
     return _chat_orchestrator(cleaned, lang)
+
+
+def _chat_output_text(output: dict[str, Any]) -> str:
+    kind = output.get("kind")
+    data = output.get("data")
+    if kind == "ideas":
+        return "\n\n".join(idea_to_clipboard(idea) for idea in data or [])
+    if kind == "script" and isinstance(data, Script):
+        sections = "\n\n".join(section.get("content", "") for section in data.sections)
+        return "\n\n".join(part for part in (data.title, data.description, sections, ", ".join(data.keywords), ", ".join(data.hashtags)) if part)
+    if kind == "seo" and isinstance(data, SEOData):
+        return "\n\n".join(part for part in (
+            data.seo_description,
+            "\n".join(data.seo_titles),
+            "\n".join(data.clickbait_titles),
+            ", ".join(data.seo_tags),
+            "\n".join(data.chapters),
+            ", ".join(data.thumbnail_texts),
+        ) if part)
+    if kind == "evaluation" and isinstance(data, Evaluation):
+        return "\n\n".join(part for part in (
+            f"{data.score}% → {data.improved_score}%",
+            data.analysis,
+            data.idea.title,
+            data.idea.hook,
+            data.idea.value,
+            "\n".join(data.outline),
+        ) if part)
+    if kind == "visual":
+        return str(data or "")
+    return "\n".join(f"{key}: {value}" for key, value in (data or {}).items()) if isinstance(data, dict) else str(data or "")
+
+
+def _render_chat_output() -> None:
+    output = st.session_state.get("chat_output")
+    if not st.session_state.get("last_chat_reply"):
+        return
+    if not output:
+        ctx = ensure_project_context()
+        output = {
+            "kind": "context",
+            "request": st.session_state.get("last_chat_request", ""),
+            "data": {
+                "topic": ctx.get("topic") or ctx.get("idea") or "",
+                "platform": ctx.get("platform") or DEFAULT_PLATFORM,
+                "content_type": ctx.get("content_type") or "video",
+            },
+        }
+
+    with st.container(border=True):
+        st.markdown(f"### {t('chat.latest_result')}")
+        st.markdown(f"**{t('chat.user_request')}**")
+        st.write(output.get("request") or st.session_state.get("last_chat_request", ""))
+        st.markdown(f"**{t('chat.ai_response')}**")
+        st.write(st.session_state["last_chat_reply"])
+
+        kind = output.get("kind")
+        data = output.get("data")
+        if kind == "ideas":
+            _render_idea_result(
+                data or [],
+                output.get("topic", ""),
+                platform=output.get("platform") or DEFAULT_PLATFORM,
+                details=output.get("details"),
+            )
+        elif kind == "script" and isinstance(data, Script):
+            _render_script_result(data, details=st.session_state.get("script_result_context"))
+        elif kind == "seo" and isinstance(data, SEOData):
+            _render_seo_result(data, details=output.get("context"))
+        elif kind == "evaluation" and isinstance(data, Evaluation):
+            render_evaluation(data, output.get("original", ""), context=output.get("context"))
+        elif kind == "visual":
+            _render_visual_result(t("result.visual"), str(data or ""), meta=output.get("platform", ""))
+        elif kind == "context":
+            details = data or {}
+            for label, key in (
+                (t("result.platform"), "platform"),
+                (t("result.topic"), "topic"),
+                (t("result.content_type"), "content_type"),
+            ):
+                if details.get(key):
+                    st.markdown(f"**{html_escape(label)}:** {html_escape(str(details[key]))}", unsafe_allow_html=True)
+
+        action_cols = st.columns(4)
+        with action_cols[0]:
+            if st.button(t("workspace.use_content_studio"), key="chat_use_content_studio", use_container_width=True):
+                st.session_state["active_workspace"] = "Idea Generator"
+                st.rerun()
+        with action_cols[1]:
+            if st.button(t("workspace.send_to_seo"), key="chat_send_seo", use_container_width=True):
+                st.session_state["active_workspace"] = "SEO Optimizer"
+                st.rerun()
+        with action_cols[2]:
+            if st.button(t("workspace.send_to_visual"), key="chat_send_visual", use_container_width=True):
+                st.session_state["active_workspace"] = "Visual Prompt Studio"
+                st.rerun()
+        with action_cols[3]:
+            if st.button(t("chat.copy_result"), key="chat_copy_reply", use_container_width=True):
+                st.session_state["show_chat_reply_copy"] = True
+        if st.session_state.get("show_chat_reply_copy"):
+            render_copy_button(_chat_output_text(output))
 
 
 def render_ai_chat_panel() -> None:
@@ -4721,41 +5133,53 @@ def render_ai_chat_panel() -> None:
         for idx, action in enumerate(helpful_actions):
             with cols[idx % min(len(helpful_actions), 3)]:
                 if st.button(action, use_container_width=True, key=f"chat_action_{action.replace(' ', '_').lower()}"):
+                    platform = ctx.get("platform") or DEFAULT_PLATFORM
                     if action == t("chat.action.generate_ideas"):
-                        ideas = generate_ideas(topic, 3, platform=ctx.get("platform") or DEFAULT_PLATFORM, lang=current_lang())
+                        ideas = generate_ideas(topic, 3, platform=platform, audience=ctx.get("audience") or "", lang=current_lang())
                         st.session_state["ideas"] = ideas
-                        update_project_context(topic=topic, idea=ideas[0].title if ideas else topic, titles=[idea.title for idea in ideas], selected_title=ideas[0].title if ideas else "", content_type="idea")
-                        st.session_state["active_workspace"] = "Idea Generator"
+                        st.session_state["ideas_niche"] = topic
+                        st.session_state["ideas_generation_context"] = {"platform": platform, "audience": ctx.get("audience") or ""}
+                        update_project_context(topic=topic, idea=ideas[0].title if ideas else topic, titles=[idea.title for idea in ideas], selected_title=ideas[0].title if ideas else "", content_type="idea", platform=platform)
+                        st.session_state["chat_output"] = {"kind": "ideas", "request": action, "data": ideas, "topic": topic, "platform": platform, "details": {"platform": platform, "audience": ctx.get("audience") or ""}}
                     elif action == t("chat.action.generate_titles"):
-                        ideas = generate_ideas(topic, 3, platform=ctx.get("platform") or DEFAULT_PLATFORM, lang=current_lang())
+                        ideas = generate_ideas(topic, 3, platform=platform, audience=ctx.get("audience") or "", lang=current_lang())
                         titles = [idea.title for idea in ideas]
-                        update_project_context(topic=topic, titles=titles, selected_title=titles[0] if titles else "", content_type="title")
-                        st.session_state["active_workspace"] = "Idea Generator"
+                        st.session_state["ideas"] = ideas
+                        st.session_state["ideas_niche"] = topic
+                        update_project_context(topic=topic, titles=titles, selected_title=titles[0] if titles else "", content_type="title", platform=platform)
+                        st.session_state["chat_output"] = {"kind": "ideas", "request": action, "data": ideas, "topic": topic, "platform": platform, "details": {"platform": platform, "audience": ctx.get("audience") or ""}}
                     elif action == t("chat.action.create_script"):
                         idea_source = ctx.get("selected_title") or ctx.get("idea") or ctx.get("project_idea") or topic
                         if idea_source:
-                            result = _script_from_groq(topic, idea_source, platform=ctx.get("platform") or DEFAULT_PLATFORM, vibe="professional", audience="general viewers", lang=current_lang(), duration="3-5min")
+                            audience = ctx.get("audience") or "general viewers"
+                            duration = normalize_duration_value(ctx.get("duration") or "3-5min")
+                            result = _script_from_groq(topic, idea_source, platform=platform, vibe=ctx.get("vibe") or "professional", audience=audience, lang=current_lang(), duration=duration)
                             st.session_state["script_result"] = result
-                            update_project_context(topic=topic, idea=idea_source, script=result.description, description=result.description, hashtags=list(result.hashtags), keywords=list(result.keywords), content_type="script")
-                        st.session_state["active_workspace"] = "Script Writer"
+                            st.session_state["script_result_context"] = {"platform": platform, "audience": audience, "duration": duration}
+                            update_project_context(topic=topic, idea=idea_source, script=result.description, description=result.description, hashtags=list(result.hashtags), keywords=list(result.keywords), content_type="script", platform=platform)
+                            st.session_state["chat_output"] = {"kind": "script", "request": action, "data": result}
                     elif action == t("chat.action.create_seo"):
-                        seo_result = _seo_from_groq(topic, topic, lang=current_lang())
+                        _, seo_context = _seo_generation_inputs(title=ctx.get("selected_title") or "", description=ctx.get("description") or "", niche=topic, primary_keyword=(ctx.get("keywords") or [""])[0] if ctx.get("keywords") else "", audience=ctx.get("audience") or "", platform=platform)
+                        seo_result = _seo_from_groq(topic, seo_context, lang=current_lang())
                         st.session_state["seo_result"] = seo_result
-                        update_project_context(topic=topic, seo=seo_result.seo_description, keywords=list(seo_result.seo_tags), search_tags=list(seo_result.seo_tags), content_type="seo")
-                        st.session_state["active_workspace"] = "SEO Optimizer"
+                        update_project_context(topic=topic, seo=seo_result.seo_description, keywords=list(seo_result.seo_tags), search_tags=list(seo_result.seo_tags), content_type="seo", platform=platform)
+                        st.session_state["chat_output"] = {"kind": "seo", "request": action, "data": seo_result, "context": {"topic": topic, "niche": topic, "platform": platform}}
                     elif action == t("chat.action.generate_keywords"):
-                        if not ctx.get("seo") and st.session_state.get("seo_result"):
-                            st.session_state["active_workspace"] = "SEO Optimizer"
-                        else:
-                            seo_result = _seo_from_groq(topic, topic, lang=current_lang())
+                        seo_result = st.session_state.get("seo_result")
+                        if not isinstance(seo_result, SEOData):
+                            _, seo_context = _seo_generation_inputs(title=ctx.get("selected_title") or "", description=ctx.get("description") or "", niche=topic, primary_keyword="", audience=ctx.get("audience") or "", platform=platform)
+                            seo_result = _seo_from_groq(topic, seo_context, lang=current_lang())
                             st.session_state["seo_result"] = seo_result
-                            update_project_context(topic=topic, seo=seo_result.seo_description, keywords=list(seo_result.seo_tags), search_tags=list(seo_result.seo_tags), content_type="seo")
-                            st.session_state["active_workspace"] = "SEO Optimizer"
+                        update_project_context(topic=topic, seo=seo_result.seo_description, keywords=list(seo_result.seo_tags), search_tags=list(seo_result.seo_tags), content_type="seo", platform=platform)
+                        st.session_state["chat_output"] = {"kind": "seo", "request": action, "data": seo_result, "context": {"topic": topic, "niche": topic, "platform": platform}}
                     elif action == t("chat.action.create_visual"):
-                        prompt = f"Create a cinematic {ctx.get('platform') or DEFAULT_PLATFORM} visual concept for '{topic}'. Use a clear focal point, readable typography, and a strong curiosity hook."
+                        prompt = f"Create a cinematic {platform} visual concept for '{topic}'. Use a clear focal point, readable typography, and a strong curiosity hook."
                         update_project_context(topic=topic, visual_direction=prompt, content_type="visual")
                         st.session_state["thumbnail_prompt"] = prompt
-                        st.session_state["active_workspace"] = "Visual Prompt Studio"
+                        st.session_state["chat_output"] = {"kind": "visual", "request": action, "data": prompt, "platform": platform}
+                    st.session_state["last_chat_request"] = action
+                    st.session_state["last_chat_reply"] = t("chat.result_ready")
+                    st.session_state["show_chat_reply_copy"] = False
                     st.rerun()
 
     action_cols = st.columns(3)
@@ -4767,8 +5191,8 @@ def render_ai_chat_panel() -> None:
     with action_cols[1]:
         if st.button("Open Idea Evaluator", use_container_width=True):
             st.session_state["active_workspace"] = "Idea Evaluator"
-            st.session_state["workspace_seo_topic"] = ctx.get("topic") or ctx.get("idea") or ""
-            st.session_state["workspace_seo_niche"] = ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM
+            st.session_state["idea_eval_input"] = ctx.get("selected_title") or ctx.get("idea") or ctx.get("topic") or ""
+            st.session_state["idea_eval_niche"] = ctx.get("topic") or ctx.get("idea") or ""
             update_project_context(topic=ctx.get("topic") or ctx.get("idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
             st.rerun()
     with action_cols[2]:
@@ -4794,64 +5218,34 @@ def render_ai_chat_panel() -> None:
     st.markdown('<div class="ts-chat-shell">', unsafe_allow_html=True)
     for message in st.session_state["copilot_messages"]:
         with st.chat_message(message["role"]):
+            st.caption(t("chat.user_request") if message["role"] == "user" else t("chat.ai_response"))
             st.markdown(message["content"])
 
-    input_col, mic_col, send_col = st.columns([7, 2, 3])
-    with input_col:
-        st.text_input(
-            t("chat.ai_copilot"),
-            key="main_ai_copilot_input",
-            help="Describe the topic, request, or next step for the active project.",
-            label_visibility="collapsed",
-            placeholder=t("ui.placeholder"),
-        )
-    with mic_col:
-        if st.button("🎤", key="copilot_mic", help="Voice note", use_container_width=True):
-            st.session_state["main_ai_copilot_input"] = "I want to create content about AI productivity for YouTube Shorts."
-    with send_col:
-        if st.button("🚀", key="copilot_send", help="Send message", use_container_width=True):
-            if st.session_state.get("main_ai_copilot_input", "").strip():
-                prompt = st.session_state["main_ai_copilot_input"].strip()
-                st.session_state["copilot_messages"].append({"role": "user", "content": prompt})
-                with st.chat_message("user"):
-                    st.markdown(prompt)
-                reply = _copilot_reply(prompt, current_lang())
-                st.session_state["copilot_messages"].append({"role": "assistant", "content": reply})
-                with st.chat_message("assistant"):
-                    st.markdown(reply)
-                st.session_state["last_chat_reply"] = reply
-                st.session_state["show_chat_reply_copy"] = False
-                st.session_state["main_ai_copilot_input"] = ""
+    with st.form("ai_chat_form", clear_on_submit=True):
+        input_col, send_col = st.columns([9, 3])
+        with input_col:
+            chat_prompt = st.text_input(
+                t("chat.ai_copilot"),
+                key="main_ai_copilot_input",
+                help="Describe the topic, request, or next step for the active project.",
+                label_visibility="collapsed",
+                placeholder=t("ui.placeholder"),
+            )
+            st.caption(t("chat.voice_unavailable"))
+        with send_col:
+            submitted = st.form_submit_button("🚀", key="copilot_send", help="Send message", use_container_width=True)
+    if submitted and chat_prompt.strip():
+        prompt = chat_prompt.strip()
+        st.session_state["copilot_messages"].append({"role": "user", "content": prompt})
+        reply = _copilot_reply(prompt, current_lang())
+        st.session_state["copilot_messages"].append({"role": "assistant", "content": reply})
+        st.session_state["last_chat_request"] = prompt
+        st.session_state["last_chat_reply"] = reply
+        st.session_state["show_chat_reply_copy"] = False
+        st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-    if st.session_state.get("last_chat_reply"):
-        render_artifact_card(
-            "Project artifact",
-            "Use the shared project context or send this output into the relevant workspace.",
-            badge="Project artifact",
-            meta="Context-aware output",
-        )
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            if st.button("Use in Idea Generator", key="chat_use_content_studio", use_container_width=True):
-                st.session_state["active_workspace"] = "Idea Generator"
-                update_project_context(topic=ctx.get("topic") or ctx.get("idea") or ctx.get("project_idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
-                st.rerun()
-        with c2:
-            if st.button("Open Idea Evaluator", key="chat_send_seo", use_container_width=True):
-                st.session_state["active_workspace"] = "Idea Evaluator"
-                update_project_context(topic=ctx.get("topic") or ctx.get("idea") or ctx.get("project_idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
-                st.rerun()
-        with c3:
-            if st.button("Send to Script Writer", key="chat_send_visual", use_container_width=True):
-                st.session_state["active_workspace"] = "Script Writer"
-                update_project_context(topic=ctx.get("topic") or ctx.get("idea") or ctx.get("project_idea") or "", idea=ctx.get("idea") or ctx.get("project_idea") or "", platform=ctx.get("platform") or ctx.get("selected_platform") or DEFAULT_PLATFORM)
-                st.rerun()
-        with c4:
-            if st.button("Copy", key="chat_copy_reply", use_container_width=True):
-                st.session_state["show_chat_reply_copy"] = True
-        if st.session_state.get("show_chat_reply_copy"):
-            render_copy_button(st.session_state["last_chat_reply"])
+    _render_chat_output()
 
 
 def render_idea_cards(ideas: list[Idea], niche: str, *, platform: str) -> None:
@@ -5003,70 +5397,88 @@ def render_paywall(context: str = "generate") -> None:
     )
 
 
-def render_evaluation(result: Evaluation, original: str) -> None:
-    render_html(
-        f"""
-        <div class="ts-section">
-            <h2>{html_escape(t("eval.section"))}</h2>
-            <span class="mode long">{html_escape(t("eval.before"))}</span>
-            <span class="count">{html_escape(t("eval.analyzed"))}</span>
-        </div>
-        """
-    )
+def render_evaluation(
+    result: Evaluation,
+    original: str,
+    *,
+    context: dict[str, str] | None = None,
+) -> None:
+    with st.container(border=True):
+        st.markdown(f"### {t('result.evaluation')}")
+        if context:
+            details = (
+                ("platform", t("result.platform")),
+                ("audience", t("result.audience")),
+                ("niche", t("result.niche")),
+                ("content_type", t("result.content_type")),
+                ("title", t("result.title")),
+            )
+            visible_details = [f"{label}: {context[key]}" for key, label in details if context.get(key)]
+            if visible_details:
+                st.caption(" · ".join(visible_details))
+        render_html(
+            f"""
+            <div class="ts-section">
+                <h2>{html_escape(t("eval.section"))}</h2>
+                <span class="mode long">{html_escape(t("eval.before"))}</span>
+                <span class="count">{html_escape(t("eval.analyzed"))}</span>
+            </div>
+            """
+        )
 
-    st.progress(result.score / 100, text=t("eval.progress", n=result.score))
+        st.progress(result.score / 100, text=t("eval.progress", n=result.score))
 
-    col_a, col_b = st.columns(2)
-    col_a.metric(t("eval.original_score"), f"{result.score}%")
-    col_b.metric(
-        t("eval.improved_score"),
-        f"{result.improved_score}%",
-        f"+{result.improved_score - result.score}",
-    )
+        col_a, col_b = st.columns(2)
+        col_a.metric(t("eval.original_score"), f"{result.score}%")
+        col_b.metric(
+            t("eval.improved_score"),
+            f"{result.improved_score}%",
+            f"+{result.improved_score - result.score}",
+        )
 
-    outline_items = "".join(f"<li>{html_escape(step)}</li>" for step in result.outline)
-    render_html(
-        f"""
-        <div class="ts-eval-grid">
-            <div class="ts-card">
-                <div class="num">؟</div>
-                <h3>{html_escape(t("card.why_needs_work"))}</h3>
-                <div class="row">
-                    <span class="lbl hook">{html_escape(t("card.analysis"))}</span>
-                    <p>{html_escape(result.analysis)}</p>
+        outline_items = "".join(f"<li>{html_escape(step)}</li>" for step in result.outline)
+        render_html(
+            f"""
+            <div class="ts-eval-grid">
+                <div class="ts-card">
+                    <div class="num">؟</div>
+                    <h3>{html_escape(t("card.why_needs_work"))}</h3>
+                    <div class="row">
+                        <span class="lbl hook">{html_escape(t("card.analysis"))}</span>
+                        <p>{html_escape(result.analysis)}</p>
+                    </div>
+                    <div class="row">
+                        <span class="lbl value">{html_escape(t("card.original"))}</span>
+                        <p>{html_escape(original)}</p>
+                    </div>
                 </div>
-                <div class="row">
-                    <span class="lbl value">{html_escape(t("card.original"))}</span>
-                    <p>{html_escape(original)}</p>
+                <div class="ts-card improved">
+                    <div class="ts-card-body">
+                        <div>
+                            <span class="ts-flag">{html_escape(t("card.improved"))}</span>
+                        </div>
+                        <h3>{html_escape(result.idea.title)}</h3>
+                        <div class="row">
+                            <span class="lbl hook">{html_escape(t("card.hook"))}</span>
+                            <p>{html_escape(result.idea.hook)}</p>
+                        </div>
+                        <div class="row">
+                            <span class="lbl angle">{html_escape(t("card.angle"))}</span>
+                            <p>{html_escape(result.idea.value)}</p>
+                        </div>
+                        <div class="row">
+                            <span class="lbl outline-lbl">{html_escape(t("card.outline"))}</span>
+                            <ol class="ts-outline">{outline_items}</ol>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="ts-card improved">
-                <div class="ts-card-body">
-                    <div>
-                        <span class="ts-flag">{html_escape(t("card.improved"))}</span>
-                    </div>
-                    <h3>{html_escape(result.idea.title)}</h3>
-                    <div class="row">
-                        <span class="lbl hook">{html_escape(t("card.hook"))}</span>
-                        <p>{html_escape(result.idea.hook)}</p>
-                    </div>
-                    <div class="row">
-                        <span class="lbl angle">{html_escape(t("card.angle"))}</span>
-                        <p>{html_escape(result.idea.value)}</p>
-                    </div>
-                    <div class="row">
-                        <span class="lbl outline-lbl">{html_escape(t("card.outline"))}</span>
-                        <ol class="ts-outline">{outline_items}</ol>
-                    </div>
-                </div>
-            </div>
-        </div>
-        """
-    )
+            """
+        )
 
-    spacer, holder = st.columns(2)
-    with holder:
-        render_copy_button(idea_to_clipboard(result.idea))
+        spacer, holder = st.columns(2)
+        with holder:
+            render_copy_button(idea_to_clipboard(result.idea))
 
 
 def render_footer() -> None:
@@ -5598,20 +6010,37 @@ def render_idea_evaluator_workspace() -> None:
     render_workspace_header("Idea Evaluator", "Evaluate any idea manually using the existing evaluation workflow.")
     project_platform = render_platform_picker(key="idea_evaluator_platform")
 
-    st.markdown("### Idea Evaluation")
-    st.caption("Evaluate an idea before it becomes a title, script, or SEO strategy.")
-    idea_input = st.text_area("Idea", value=st.session_state.get("project_context", {}).get("idea") or st.session_state.get("project_context", {}).get("project_idea") or "", key="idea_eval_input", height=140)
-    eval_platform = st.selectbox("Target platform", PROJECT_PLATFORM_OPTIONS, index=PROJECT_PLATFORM_OPTIONS.index(project_platform) if project_platform in PROJECT_PLATFORM_OPTIONS else 0, key="idea_eval_platform")
-    eval_audience = st.text_input("Audience", value=st.session_state.get("project_context", {}).get("audience") or "", key="idea_eval_audience")
-    eval_niche = st.text_input("Niche", value=st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "", key="idea_eval_niche")
-    eval_content_type = st.selectbox("Content type", ["Video", "Short", "Podcast", "Guide", "Series"], index=0, key="idea_eval_content_type")
-    eval_title = st.text_input("Optional title", value=st.session_state.get("project_context", {}).get("selected_title") or "", key="idea_eval_title")
+    with st.container(border=True):
+        st.markdown("### Idea Evaluation")
+        st.caption("Evaluate an idea before it becomes a title, script, or SEO strategy.")
+        idea_input = st.text_area("Idea", value=st.session_state.get("project_context", {}).get("idea") or st.session_state.get("project_context", {}).get("project_idea") or "", key="idea_eval_input", height=140)
+        eval_platform = st.selectbox("Target platform", PROJECT_PLATFORM_OPTIONS, index=PROJECT_PLATFORM_OPTIONS.index(project_platform) if project_platform in PROJECT_PLATFORM_OPTIONS else 0, key="idea_eval_platform")
+        eval_audience = st.text_input("Audience", value=st.session_state.get("project_context", {}).get("audience") or "", key="idea_eval_audience")
+        eval_niche = st.text_input("Niche", value=st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "", key="idea_eval_niche")
+        eval_content_type = st.selectbox("Content type", ["Video", "Short", "Podcast", "Guide", "Series"], index=0, key="idea_eval_content_type")
+        eval_title = st.text_input("Optional title", value=st.session_state.get("project_context", {}).get("selected_title") or "", key="idea_eval_title")
+        evaluate_clicked = st.button("Evaluate Idea", key="idea_eval_button", type="primary")
 
-    if st.button("Evaluate Idea", key="idea_eval_button", type="primary"):
+    if evaluate_clicked:
         if idea_input.strip():
+            evaluation_context = _evaluation_generation_context(
+                platform=eval_platform,
+                audience=eval_audience,
+                niche=eval_niche,
+                content_type=eval_content_type,
+                title=eval_title,
+            )
             with st.spinner("Evaluating idea..."):
-                result = evaluate_idea(idea_input.strip(), lang=current_lang())
+                result = evaluate_idea(idea_input.strip(), lang=current_lang(), context=evaluation_context)
                 st.session_state["idea_eval_result"] = result
+                st.session_state["idea_eval_original"] = idea_input.strip()
+                st.session_state["idea_eval_context"] = {
+                    "platform": eval_platform,
+                    "audience": eval_audience,
+                    "niche": eval_niche,
+                    "content_type": eval_content_type,
+                    "title": eval_title,
+                }
                 update_project_context(
                     idea=idea_input.strip(),
                     topic=eval_niche.strip() or idea_input.strip(),
@@ -5619,6 +6048,7 @@ def render_idea_evaluator_workspace() -> None:
                     selected_title=eval_title.strip() or result.idea.title,
                     evaluation=result.analysis,
                     content_type=eval_content_type.lower(),
+                    audience=eval_audience.strip(),
                 )
                 st.success("Idea evaluated and saved to the project context.")
         else:
@@ -5626,7 +6056,11 @@ def render_idea_evaluator_workspace() -> None:
 
     if st.session_state.get("idea_eval_result"):
         result = st.session_state["idea_eval_result"]
-        render_evaluation(result, idea_input)
+        render_evaluation(
+            result,
+            st.session_state.get("idea_eval_original") or idea_input,
+            context=st.session_state.get("idea_eval_context"),
+        )
         c1, c2, c3, c4 = st.columns(4)
         with c1:
             if st.button("Use Improved Idea", key="idea_eval_use_idea", use_container_width=True):
@@ -5650,95 +6084,83 @@ def render_idea_evaluator_workspace() -> None:
 def render_script_writer_workspace() -> None:
     """Standalone script writer that can be used without any prior idea generation or project state."""
     render_workspace_header("Script Writer", "Create a polished script from a topic, title, audience, platform, and runtime context.")
-    project_platform = render_platform_picker(key="script_writer_platform")
+    with st.container(border=True):
+        project_platform = render_platform_picker(key="script_writer_platform")
+        title_input = st.text_input("Working title", value=st.session_state.get("project_context", {}).get("selected_title") or st.session_state.get("project_context", {}).get("idea") or "", key="script_writer_title")
+        topic_input = st.text_input("Topic / idea", value=st.session_state.get("workspace_script_idea") or st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "", key="workspace_script_topic")
+        audience = st.text_input("Audience", value=st.session_state.get("project_context", {}).get("audience") or "general viewers", key="script_writer_audience")
+        content_type = st.selectbox("Content type", ["Video", "Short", "Podcast", "Guide", "Series"], index=0, key="script_writer_content_type")
+        duration_choice = st.selectbox("Video duration", ["Shorts", "3-5 min", "8-10 min", "15+ min"], index=1, key="script_writer_duration")
+        speaking_style = st.selectbox("Speaking style", ["professional", "casual", "educational", "story-driven", "energetic"], index=0, key="script_writer_vibe")
+        script_lang = st.selectbox("Language", list(SUPPORTED_LANGUAGES), index=list(SUPPORTED_LANGUAGES).index(current_lang()), key="script_writer_language")
+        key_points = st.text_area("Key points", value="", key="script_writer_key_points", height=100)
+        additional_context = st.text_area("Additional context", value="", key="script_writer_context", height=90)
+        generate_clicked = st.button("Generate Script", type="primary", key="content_script_generate")
 
-    title_input = st.text_input("Working title", value=st.session_state.get("project_context", {}).get("selected_title") or st.session_state.get("project_context", {}).get("idea") or "", key="script_writer_title")
-    topic_input = st.text_input("Topic / idea", value=st.session_state.get("workspace_script_idea") or st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "", key="workspace_script_topic")
-    audience = st.text_input("Audience", value=st.session_state.get("project_context", {}).get("audience") or "general viewers", key="script_writer_audience")
-    content_type = st.selectbox("Content type", ["Video", "Short", "Podcast", "Guide", "Series"], index=0, key="script_writer_content_type")
-    duration_choice = st.selectbox("Video duration", ["Shorts", "3-5 min", "8-10 min", "15+ min"], index=1, key="script_writer_duration")
-    speaking_style = st.selectbox("Speaking style", ["professional", "casual", "educational", "story-driven", "energetic"], index=0, key="script_writer_vibe")
-    script_lang = st.selectbox("Language", list(SUPPORTED_LANGUAGES), index=list(SUPPORTED_LANGUAGES).index(current_lang()), key="script_writer_language")
-    key_points = st.text_area("Key points", value="", key="script_writer_key_points", height=100)
-    additional_context = st.text_area("Additional context", value="", key="script_writer_context", height=90)
-
-    if st.button("Generate Script", type="primary", key="content_script_generate"):
+    if generate_clicked:
+        project_context = st.session_state.get("project_context", {})
+        topic_seed = topic_input.strip() or title_input.strip() or project_context.get("topic") or project_context.get("idea") or ""
         idea_seed = _script_idea_seed(
             title_input,
-            st.session_state.get("project_context", {}).get("idea") or "",
-            topic_input,
+            project_context.get("idea") or "",
+            topic_seed,
         )
-        if topic_input.strip():
-            context_parts = [idea_seed]
+        if topic_seed:
+            context_parts = [f"Topic: {topic_seed}", f"Core idea: {idea_seed}"]
             if key_points.strip():
                 context_parts.append(f"Key points: {key_points.strip()}")
             if additional_context.strip():
                 context_parts.append(f"Additional context: {additional_context.strip()}")
             if content_type:
                 context_parts.append(f"Content type: {content_type}")
-            idea_text = " ".join(part for part in context_parts if part and str(part).strip())
+            idea_text = "\n".join(part for part in context_parts if part and str(part).strip())
+            normalized_duration = normalize_duration_value(duration_choice)
+            effective_audience = audience.strip() or "general viewers"
             with st.spinner("Generating script..."):
                 result = _script_from_groq(
-                    topic_input.strip(),
+                    topic_seed,
                     idea_text,
                     platform=project_platform,
                     vibe=speaking_style,
-                    audience=audience.strip() or "general viewers",
+                    audience=effective_audience,
                     lang=script_lang,
-                    duration=normalize_duration_value(duration_choice),
+                    duration=normalized_duration,
                 )
                 st.session_state["script_result"] = result
+                st.session_state["script_result_context"] = {
+                    "platform": project_platform,
+                    "audience": effective_audience,
+                    "duration": normalized_duration,
+                    "content_type": content_type,
+                    "style": speaking_style,
+                }
                 update_project_context(
-                    topic=topic_input.strip(),
+                    topic=topic_seed,
                     idea=idea_text,
-                    selected_title=title_input.strip() or idea_text,
+                    selected_title=title_input.strip() or idea_seed,
                     script=result.description,
                     description=result.description,
                     hashtags=list(result.hashtags),
                     keywords=list(result.keywords),
                     content_type=content_type.lower(),
                     platform=project_platform,
+                    audience=effective_audience,
                 )
                 st.success("Script generated and saved.")
         else:
-            st.warning("Please provide a topic before generating.")
+            st.warning("Please provide a topic or title before generating.")
     result = st.session_state.get("script_result")
     if result:
-        st.markdown(f"### {html_escape(result.title)}", unsafe_allow_html=True)
-        if result.sections:
-            for idx, section in enumerate(result.sections):
-                section_name = section.get("name") or f"Section {idx + 1}"
-                section_time = section.get("time") or ""
-                section_content = section.get("content") or ""
-                notes = section.get("notes") or ""
-                st.markdown(
-                    f"""
-                    <div class="premium-card" style="padding: 1rem; margin-bottom: 0.75rem;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap; margin-bottom: 0.5rem;">
-                            <span class="badge">{html_escape(section_name)}</span>
-                            {f'<span class="badge">{html_escape(section_time)}</span>' if section_time else ''}
-                        </div>
-                        <div class="meta" style="white-space: pre-wrap;">{html_escape(section_content)}</div>
-                        {f'<div class="meta" style="margin-top: 0.7rem; color: #C4B5FD;">{html_escape(notes)}</div>' if notes else ''}
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-        else:
-            st.write(result.description)
-        if result.keywords:
-            st.markdown("#### Keywords")
-            st.markdown(_render_chip_row(tuple(result.keywords), limit=8), unsafe_allow_html=True)
-        if result.hashtags:
-            st.markdown("#### Hashtags")
-            st.markdown(_render_chip_row(tuple(result.hashtags), limit=12), unsafe_allow_html=True)
-        c1, c2 = st.columns(2)
-        with c1:
-            render_copy_button(result.description)
-        with c2:
-            if st.button("Save", key="content_script_save", use_container_width=True):
-                update_project_context(script=result.description, description=result.description, hashtags=list(result.hashtags), keywords=list(result.keywords), content_type="script")
-                st.success("Script is now part of the shared project context.")
+        _render_script_result(result, details=st.session_state.get("script_result_context"))
+        copy_text = _chat_output_text({"kind": "script", "data": result})
+        with st.container(border=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                render_copy_button(copy_text)
+            with c2:
+                if st.button("Save", key="content_script_save", use_container_width=True):
+                    update_project_context(script=result.description, description=result.description, hashtags=list(result.hashtags), keywords=list(result.keywords), content_type="script")
+                    st.success("Script is now part of the shared project context.")
 
 
 def render_content_studio_workspace() -> None:
@@ -5749,20 +6171,23 @@ def render_content_studio_workspace() -> None:
     tabs = st.tabs(["Ideas", "Titles"])
 
     with tabs[0]:
-        niche = st.text_input("Channel / content niche", value=st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "", key="content_ideas_niche")
-        audience = st.text_input("Target audience", value=st.session_state.get("project_context", {}).get("audience") or "", key="content_ideas_audience")
-        platform = st.selectbox("Platform", PROJECT_PLATFORM_OPTIONS, index=PROJECT_PLATFORM_OPTIONS.index(project_platform) if project_platform in PROJECT_PLATFORM_OPTIONS else 0, key="content_ideas_platform")
-        content_type = st.selectbox("Content type", ["Video", "Short", "Podcast", "Guide", "Series"], index=0, key="content_ideas_type")
-        duration_choice = st.selectbox("Video duration", ["3-5 min", "8-10 min", "15-20 min", "Short-form"], index=1, key="content_ideas_duration")
-        lang = st.selectbox("Language", list(SUPPORTED_LANGUAGES), index=list(SUPPORTED_LANGUAGES).index(current_lang()), key="content_ideas_lang")
-        notes = st.text_area("Additional context", value="", key="content_ideas_context", height=100)
+        with st.container(border=True):
+            niche = st.text_input("Channel / content niche", value=st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "", key="content_ideas_niche")
+            audience = st.text_input("Target audience", value=st.session_state.get("project_context", {}).get("audience") or "", key="content_ideas_audience")
+            platform = st.selectbox("Platform", PROJECT_PLATFORM_OPTIONS, index=PROJECT_PLATFORM_OPTIONS.index(project_platform) if project_platform in PROJECT_PLATFORM_OPTIONS else 0, key="content_ideas_platform")
+            content_type = st.selectbox("Content type", ["Video", "Short", "Podcast", "Guide", "Series"], index=0, key="content_ideas_type")
+            duration_choice = st.selectbox("Video duration", ["3-5 min", "8-10 min", "15-20 min", "Short-form"], index=1, key="content_ideas_duration")
+            lang = st.selectbox("Language", list(SUPPORTED_LANGUAGES), index=list(SUPPORTED_LANGUAGES).index(current_lang()), key="content_ideas_lang")
+            notes = st.text_area("Additional context", value="", key="content_ideas_context", height=100)
+            generate_clicked = st.button("Generate Ideas", type="primary", key="content_ideas_generate")
 
-        if st.button("Generate Ideas", type="primary", key="content_ideas_generate"):
+        if generate_clicked:
             if niche.strip():
                 prompt_vibe = f"{content_type} for {audience or 'general audiences'}"
                 if notes.strip():
                     prompt_vibe = f"{prompt_vibe} | {notes.strip()}"
                 with st.spinner("Generating ideas..."):
+                    normalized_duration = normalize_duration_value(duration_choice)
                     items = generate_ideas(
                         niche.strip(),
                         FREE_IDEAS_COUNT,
@@ -5770,10 +6195,17 @@ def render_content_studio_workspace() -> None:
                         vibe=prompt_vibe,
                         audience=audience,
                         lang=lang,
-                        duration=normalize_duration_value(duration_choice),
+                        duration=normalized_duration,
                     )
                     st.session_state["ideas"] = items
                     st.session_state["ideas_niche"] = niche.strip()
+                    st.session_state["ideas_generation_context"] = {
+                        "platform": platform,
+                        "audience": audience,
+                        "duration": normalized_duration,
+                        "content_type": content_type,
+                        "language": lang,
+                    }
                     update_project_context(
                         topic=niche.strip(),
                         idea=items[0].title if items else niche.strip(),
@@ -5781,69 +6213,88 @@ def render_content_studio_workspace() -> None:
                         selected_title=items[0].title if items else "",
                         content_type="idea",
                         platform=platform,
+                        audience=audience,
                     )
                     st.success("Ideas generated and saved to the project context.")
             else:
                 st.warning("Please enter a niche or topic first.")
 
         if st.session_state.get("ideas"):
-            render_idea_cards(st.session_state["ideas"], st.session_state.get("ideas_niche", ""), platform=platform)
-            if st.button("Save ideas to project", key="content_ideas_save"):
-                update_project_context(topic=(st.session_state.get("ideas_niche") or niche), titles=[idea.title for idea in st.session_state["ideas"]], selected_title=st.session_state["ideas"][0].title, content_type="idea", platform=platform)
-                st.success("Saved to project context.")
+            generated_context = st.session_state.get("ideas_generation_context") or {"platform": platform}
+            generated_platform = generated_context.get("platform") or platform
+            _render_idea_result(
+                st.session_state["ideas"],
+                st.session_state.get("ideas_niche", ""),
+                platform=generated_platform,
+                details=generated_context,
+            )
+            with st.container(border=True):
+                if st.button("Save ideas to project", key="content_ideas_save"):
+                    update_project_context(topic=(st.session_state.get("ideas_niche") or niche), titles=[idea.title for idea in st.session_state["ideas"]], selected_title=st.session_state["ideas"][0].title, content_type="idea", platform=generated_platform)
+                    st.success("Saved to project context.")
 
     with tabs[1]:
-        base_idea = st.text_input("Base idea", value=st.session_state.get("project_context", {}).get("idea") or st.session_state.get("project_context", {}).get("project_idea") or "", key="content_title_base")
-        manual_titles = st.text_area("Title variants", value="\n".join(st.session_state.get("project_context", {}).get("titles", [])), height=150, key="content_title_variants")
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if st.button("Generate Title Ideas", key="content_titles_generate"):
-                if base_idea.strip():
-                    with st.spinner("Creating title variants..."):
-                        generated = generate_ideas(base_idea.strip(), 3, platform=project_platform, lang=current_lang())
-                        titles = [idea.title for idea in generated]
-                        update_project_context(topic=base_idea.strip(), idea=base_idea.strip(), titles=titles, selected_title=titles[0] if titles else "", content_type="title", platform=project_platform)
-                        st.success("Title ideas generated.")
-        with col_b:
-            if st.button("Save titles to project", key="save_content_titles"):
-                saved = [line.strip() for line in manual_titles.splitlines() if line.strip()]
-                update_project_context(titles=saved, selected_title=saved[0] if saved else "", content_type="title")
-                st.success("Titles saved to project context.")
-        if st.session_state.get("project_context", {}).get("titles"):
-            selected_title = st.session_state.get("project_context", {}).get("selected_title")
-            for idx, title in enumerate(st.session_state["project_context"]["titles"]):
-                is_selected = title == selected_title
-                st.markdown(
-                    f"""
-                    <div class="premium-card" style="padding: 1rem; border-color: {'rgba(52,211,153,0.38)' if is_selected else 'rgba(148,163,184,0.12)'}; background: {'rgba(16,185,129,0.08)' if is_selected else 'rgba(15,23,42,0.72)'}; margin-bottom: .8rem;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; gap:.5rem; margin-bottom: .5rem; flex-wrap: wrap;">
-                            <span class="badge">#{idx + 1}</span>
-                            {_selected_meta_html(is_selected, label='Selected')}
-                        </div>
-                        <h4 style="margin: 0; color: #F8FAFC;">{html_escape(title)}</h4>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
+        with st.container(border=True):
+            base_idea = st.text_input("Base idea", value=st.session_state.get("project_context", {}).get("idea") or st.session_state.get("project_context", {}).get("project_idea") or "", key="content_title_base")
+            manual_titles = st.text_area("Title variants", value="\n".join(st.session_state.get("project_context", {}).get("titles", [])), height=150, key="content_title_variants")
+            col_a, col_b = st.columns(2)
+            with col_a:
+                generate_titles_clicked = st.button("Generate Title Ideas", key="content_titles_generate")
+            with col_b:
+                save_titles_clicked = st.button("Save titles to project", key="save_content_titles")
+        if generate_titles_clicked and base_idea.strip():
+            with st.spinner("Creating title variants..."):
+                generated = generate_ideas(
+                    base_idea.strip(),
+                    3,
+                    platform=project_platform,
+                    audience=st.session_state.get("project_context", {}).get("audience") or "",
+                    lang=current_lang(),
                 )
-                c1, c2, c3, c4 = st.columns(4)
-                with c1:
-                    if st.button("Use", key=f"title_use_{_artifact_key(title)}", use_container_width=True, type="primary" if is_selected else "secondary"):
-                        update_project_context(selected_title=title, titles=st.session_state["project_context"].get("titles", []), content_type="title")
-                        st.success("Title selected.")
-                with c2:
-                    if st.button("Save", key=f"title_save_{_artifact_key(title)}", use_container_width=True):
-                        update_project_context(titles=st.session_state["project_context"].get("titles", []), selected_title=title, content_type="title")
-                        st.success("Title saved.")
-                with c3:
-                    render_copy_button(title)
-                with c4:
-                    if st.button("Evaluate", key=f"title_eval_{_artifact_key(title)}", use_container_width=True):
-                        st.session_state["idea_eval_input"] = title
-                        st.session_state["idea_eval_title"] = title
-                        st.session_state["active_workspace"] = "Idea Evaluator"
-                        update_project_context(selected_title=title, titles=st.session_state["project_context"].get("titles", []), content_type="title")
-                        st.rerun()
-                st.markdown("<div style='margin-bottom: 0.5rem;'></div>", unsafe_allow_html=True)
+                titles = [idea.title for idea in generated]
+                update_project_context(topic=base_idea.strip(), idea=base_idea.strip(), titles=titles, selected_title=titles[0] if titles else "", content_type="title", platform=project_platform)
+                st.success("Title ideas generated.")
+        if save_titles_clicked:
+            saved = [line.strip() for line in manual_titles.splitlines() if line.strip()]
+            update_project_context(titles=saved, selected_title=saved[0] if saved else "", content_type="title")
+            st.success("Titles saved to project context.")
+        if st.session_state.get("project_context", {}).get("titles"):
+            with st.container(border=True):
+                st.markdown(f"### {t('result.title')}")
+                selected_title = st.session_state.get("project_context", {}).get("selected_title")
+                for idx, title in enumerate(st.session_state["project_context"]["titles"]):
+                    is_selected = title == selected_title
+                    st.markdown(
+                        f"""
+                        <div class="premium-card" style="padding: 1rem; border-color: {'rgba(52,211,153,0.38)' if is_selected else 'rgba(148,163,184,0.12)'}; background: {'rgba(16,185,129,0.08)' if is_selected else 'rgba(15,23,42,0.72)'}; margin-bottom: .8rem;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:.5rem; margin-bottom: .5rem; flex-wrap: wrap;">
+                                <span class="badge">#{idx + 1}</span>
+                                {_selected_meta_html(is_selected, label='Selected')}
+                            </div>
+                            <h4 style="margin: 0; color: #F8FAFC;">{html_escape(title)}</h4>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    c1, c2, c3, c4 = st.columns(4)
+                    with c1:
+                        if st.button("Use", key=f"title_use_{_artifact_key(title)}", use_container_width=True, type="primary" if is_selected else "secondary"):
+                            update_project_context(selected_title=title, titles=st.session_state["project_context"].get("titles", []), content_type="title")
+                            st.success("Title selected.")
+                    with c2:
+                        if st.button("Save", key=f"title_save_{_artifact_key(title)}", use_container_width=True):
+                            update_project_context(titles=st.session_state["project_context"].get("titles", []), selected_title=title, content_type="title")
+                            st.success("Title saved.")
+                    with c3:
+                        render_copy_button(title)
+                    with c4:
+                        if st.button("Evaluate", key=f"title_eval_{_artifact_key(title)}", use_container_width=True):
+                            st.session_state["idea_eval_input"] = title
+                            st.session_state["idea_eval_title"] = title
+                            st.session_state["active_workspace"] = "Idea Evaluator"
+                            update_project_context(selected_title=title, titles=st.session_state["project_context"].get("titles", []), content_type="title")
+                            st.rerun()
+                    st.markdown("<div style='margin-bottom: 0.5rem;'></div>", unsafe_allow_html=True)
 
 
 def render_seo_workspace() -> None:
@@ -5854,70 +6305,70 @@ def render_seo_workspace() -> None:
     tabs = st.tabs(["SEO Overview", "Keyword Research", "SEO Optimizer", "Search Tags", "Discovery"])
 
     with tabs[0]:
-        st.markdown("### SEO Overview")
-        st.caption("High-level optimization output for the active topic.")
-        topic = st.text_input("Video topic", value=st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "", key="workspace_seo_topic")
-        niche = st.text_input("Niche / category", value=st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "", key="workspace_seo_niche")
-        if st.button("Generate SEO Overview", type="primary", key="seo_workspace_generate"):
+        with st.container(border=True):
+            st.markdown("### SEO Overview")
+            st.caption("High-level optimization output for the active topic.")
+            topic = st.text_input("Video topic", value=st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "", key="workspace_seo_topic")
+            niche = st.text_input("Niche / category", value=st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "", key="workspace_seo_niche")
+            overview_clicked = st.button("Generate SEO Overview", type="primary", key="seo_workspace_generate")
+        if overview_clicked:
             if topic.strip() and niche.strip():
                 with st.spinner("Generating SEO output..."):
-                    result = _seo_from_groq(topic.strip(), niche.strip(), lang=current_lang())
+                    _, seo_context = _seo_generation_inputs(
+                        title=topic,
+                        description=st.session_state.get("project_context", {}).get("description") or "",
+                        niche=niche,
+                        primary_keyword=(st.session_state.get("project_context", {}).get("keywords") or [""])[0] if st.session_state.get("project_context", {}).get("keywords") else "",
+                        audience=st.session_state.get("project_context", {}).get("audience") or "",
+                        platform=project_platform,
+                    )
+                    result = _seo_from_groq(topic.strip(), seo_context, lang=current_lang())
                     st.session_state["seo_result"] = result
+                    st.session_state["seo_result_context"] = {"platform": project_platform, "topic": topic.strip(), "niche": niche.strip()}
                     update_project_context(topic=topic.strip(), idea=topic.strip(), seo=result.seo_description, keywords=list(result.seo_tags), search_tags=list(result.seo_tags), content_type="seo", platform=project_platform)
                     st.success("SEO data generated and saved to the project context.")
             else:
                 st.warning("Please provide both the topic and niche.")
         data = st.session_state.get("seo_result")
-        if data:
-            render_artifact_card("SEO Description", data.seo_description, badge="SEO Description", meta="Discovery-ready")
-            if data.seo_tags:
-                st.markdown("#### Keywords")
-                st.markdown(_render_chip_row(data.seo_tags, limit=12), unsafe_allow_html=True)
-            _render_seo_title_suggestions(data)
-            if data.chapters:
-                st.markdown("#### Chapters")
-                for idx, chapter in enumerate(data.chapters[:6], start=1):
-                    st.markdown(
-                        f"""
-                        <div class="premium-card" style="padding: 0.8rem 0.9rem; margin-bottom: 0.55rem;">
-                            <div class="badge">{idx}</div>
-                            <div class="meta" style="margin-top:0.55rem;">{html_escape(chapter)}</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-            if data.thumbnail_texts:
-                st.markdown("#### Thumbnail Texts")
-                st.markdown(_render_chip_row(data.thumbnail_texts, limit=6), unsafe_allow_html=True)
-            c1, c2 = st.columns(2)
-            with c1:
-                render_copy_button(data.seo_description)
-            with c2:
-                if st.button("Save SEO to project", key="seo_workspace_save", use_container_width=True):
-                    update_project_context(seo=data.seo_description, keywords=list(data.seo_tags), search_tags=list(data.seo_tags), content_type="seo")
-                    st.success("SEO saved to project context.")
+        if isinstance(data, SEOData):
+            _render_seo_result(data, details=st.session_state.get("seo_result_context"))
+            with st.container(border=True):
+                c1, c2 = st.columns(2)
+                with c1:
+                    render_copy_button(_chat_output_text({"kind": "seo", "data": data}))
+                with c2:
+                    if st.button("Save SEO to project", key="seo_workspace_save", use_container_width=True):
+                        update_project_context(seo=data.seo_description, keywords=list(data.seo_tags), search_tags=list(data.seo_tags), content_type="seo")
+                        st.success("SEO saved to project context.")
 
     with tabs[1]:
         st.markdown("### Keyword Research")
         st.caption("Keyword-focused output using the active SEO data and project context.")
         if st.session_state.get("seo_result"):
             tags = st.session_state["seo_result"].seo_tags
-            st.markdown(_render_chip_row(tags, limit=12), unsafe_allow_html=True)
-            if st.button("Save keywords to project", key="seo_keywords_save"):
-                update_project_context(keywords=list(tags), search_tags=list(tags), content_type="keyword")
-                st.success("Keywords saved.")
+            with st.container(border=True):
+                st.markdown(f"### {t('result.keywords')}")
+                if tags:
+                    st.markdown(_render_chip_row(tags, limit=12), unsafe_allow_html=True)
+                else:
+                    st.info("The SEO result did not include keyword tags.")
+                if st.button("Save keywords to project", key="seo_keywords_save"):
+                    update_project_context(keywords=list(tags), search_tags=list(tags), content_type="keyword")
+                    st.success("Keywords saved.")
         else:
             st.info("No SEO keywords generated yet. Use the SEO Overview tab to create them.")
 
     with tabs[2]:
-        st.markdown("### SEO Optimizer")
-        st.caption("Optimize title, description, and keyword output using the existing SEO backend.")
-        seo_title = st.text_input("Title", value=st.session_state.get("project_context", {}).get("selected_title") or "", key="seo_optimizer_title")
-        seo_description = st.text_area("Description", value=st.session_state.get("project_context", {}).get("seo") or st.session_state.get("project_context", {}).get("description") or "", key="seo_optimizer_description", height=130)
-        seo_niche = st.text_input("Niche", value=st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "", key="seo_optimizer_niche")
-        seo_keyword = st.text_input("Primary keyword", value=(st.session_state.get("project_context", {}).get("keywords") or [""])[0] if st.session_state.get("project_context", {}).get("keywords") else "", key="seo_optimizer_keyword")
-        seo_audience = st.text_input("Audience", value=st.session_state.get("project_context", {}).get("audience") or "", key="seo_optimizer_audience")
-        if st.button("Optimize SEO", type="primary", key="seo_optimizer_button"):
+        with st.container(border=True):
+            st.markdown("### SEO Optimizer")
+            st.caption("Optimize title, description, and keyword output using the existing SEO backend.")
+            seo_title = st.text_input("Title", value=st.session_state.get("project_context", {}).get("selected_title") or "", key="seo_optimizer_title")
+            seo_description = st.text_area("Description", value=st.session_state.get("project_context", {}).get("seo") or st.session_state.get("project_context", {}).get("description") or "", key="seo_optimizer_description", height=130)
+            seo_niche = st.text_input("Niche", value=st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "", key="seo_optimizer_niche")
+            seo_keyword = st.text_input("Primary keyword", value=(st.session_state.get("project_context", {}).get("keywords") or [""])[0] if st.session_state.get("project_context", {}).get("keywords") else "", key="seo_optimizer_keyword")
+            seo_audience = st.text_input("Audience", value=st.session_state.get("project_context", {}).get("audience") or "", key="seo_optimizer_audience")
+            optimize_clicked = st.button("Optimize SEO", type="primary", key="seo_optimizer_button")
+        if optimize_clicked:
             if any(value.strip() for value in (seo_title, seo_description, seo_niche, seo_keyword)):
                 with st.spinner("Optimizing SEO..."):
                     seo_topic, seo_context = _seo_generation_inputs(
@@ -5926,41 +6377,51 @@ def render_seo_workspace() -> None:
                         niche=seo_niche,
                         primary_keyword=seo_keyword,
                         audience=seo_audience,
+                        platform=project_platform,
                     )
                     result = _seo_from_groq(seo_topic, seo_context, lang=current_lang())
                     st.session_state["seo_result"] = result
+                    st.session_state["seo_result_context"] = {"platform": project_platform, "topic": seo_topic, "niche": seo_niche.strip()}
                     update_project_context(seo=result.seo_description, keywords=list(result.seo_tags), search_tags=list(result.seo_tags), selected_title=seo_title.strip() or st.session_state.get("project_context", {}).get("selected_title", ""), content_type="seo", platform=project_platform)
                     st.success("SEO optimization produced and saved.")
             else:
                 st.warning("Add a title or topic before optimizing SEO.")
-        if st.session_state.get("seo_result"):
-            data = st.session_state["seo_result"]
-            render_artifact_card("Optimized SEO", data.seo_description, badge="SEO", meta="Optimized")
-            _render_seo_title_suggestions(data)
-            if data.seo_tags:
-                st.markdown(_render_chip_row(data.seo_tags, limit=12), unsafe_allow_html=True)
+        data = st.session_state.get("seo_result")
+        if isinstance(data, SEOData):
+            _render_seo_result(data, details=st.session_state.get("seo_result_context"))
 
     with tabs[3]:
         st.markdown("### Search Tags")
         st.caption("Search tags and keyword reuse for discovery and SEO placement.")
         if st.session_state.get("seo_result"):
             tags = st.session_state["seo_result"].seo_tags
-            st.markdown(_render_chip_row(tags, limit=12), unsafe_allow_html=True)
-            if st.button("Save tags to project", key="seo_tags_save"):
-                update_project_context(search_tags=list(tags), keywords=list(tags), content_type="tags")
-                st.success("Tags saved.")
+            with st.container(border=True):
+                st.markdown("### Search tags")
+                if tags:
+                    st.markdown(_render_chip_row(tags, limit=12), unsafe_allow_html=True)
+                else:
+                    st.info("The SEO result did not include search tags.")
+                if st.button("Save tags to project", key="seo_tags_save"):
+                    update_project_context(search_tags=list(tags), keywords=list(tags), content_type="tags")
+                    st.success("Tags saved.")
         else:
             st.info("Generate SEO output to populate tags.")
 
     with tabs[4]:
-        st.markdown("### Discovery")
-        st.caption("Discovery-ready inputs prepared for continued keyword expansion while preserving the current working SEO functions.")
-        discovery_topic = st.text_input("Discovery topic", value=st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "", key="seo_discovery_topic")
-        discovery_niche = st.text_input("Discovery niche", value=project_platform, key="seo_discovery_niche")
-        if st.button("Prepare discovery brief", key="seo_discovery_run"):
+        with st.container(border=True):
+            st.markdown("### Discovery")
+            st.caption("Discovery-ready inputs prepared for continued keyword expansion while preserving the current working SEO functions.")
+            discovery_topic = st.text_input("Discovery topic", value=st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("idea") or "", key="seo_discovery_topic")
+            discovery_niche = st.text_input("Discovery niche", value=project_platform, key="seo_discovery_niche")
+            discovery_clicked = st.button("Prepare discovery brief", key="seo_discovery_run")
+        if discovery_clicked:
             if discovery_topic.strip():
                 update_project_context(topic=discovery_topic.strip(), platform=discovery_niche.strip() or project_platform, content_type="discovery")
-                st.info("Discovery brief prepared in the current project context.")
+                with st.container(border=True):
+                    st.markdown("### Discovery brief")
+                    st.markdown(f"**{t('result.topic')}:** {html_escape(discovery_topic.strip())}", unsafe_allow_html=True)
+                    st.markdown(f"**{t('result.platform')}:** {html_escape(discovery_niche.strip() or project_platform)}", unsafe_allow_html=True)
+                    st.info("Discovery brief prepared in the current project context.")
             else:
                 st.warning("Enter a discovery topic to prepare the context.")
 
@@ -5978,10 +6439,12 @@ def render_visual_workspace() -> None:
     tabs = st.tabs(["Visual Concept", "Thumbnail Direction", "Image Prompt", "Saved Visual Direction"])
 
     with tabs[0]:
-        st.markdown("### Visual Concept")
-        st.caption("A single clear concept for the project that can be reused across thumbnail and campaign work.")
-        visual_topic = st.text_input("Concept topic", value=st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("selected_title") or st.session_state.get("project_context", {}).get("idea") or "", key="visual_concept_topic")
-        if st.button("Create concept", key="visual_concept_create"):
+        with st.container(border=True):
+            st.markdown("### Visual Concept")
+            st.caption("A single clear concept for the project that can be reused across thumbnail and campaign work.")
+            visual_topic = st.text_input("Concept topic", value=st.session_state.get("project_context", {}).get("topic") or st.session_state.get("project_context", {}).get("selected_title") or st.session_state.get("project_context", {}).get("idea") or "", key="visual_concept_topic")
+            create_concept_clicked = st.button("Create concept", key="visual_concept_create")
+        if create_concept_clicked:
             if visual_topic.strip():
                 concept = f"High-contrast {project_platform} visual concept for '{visual_topic.strip()}': clear focal point, readable typography, dramatic lighting, and a curiosity-driven headline."
                 update_project_context(topic=visual_topic.strip(), visual_direction=concept, content_type="visual", platform=project_platform)
@@ -5989,62 +6452,49 @@ def render_visual_workspace() -> None:
                 st.success("Visual concept created and saved to project context.")
         if st.session_state.get("thumbnail_prompt"):
             brief_text = st.session_state.get("thumbnail_prompt") or st.session_state.get("project_context", {}).get("visual_direction") or ""
-            render_artifact_card(
-                "Visual Brief",
-                brief_text,
-                badge="Visual Brief",
-                meta="Thumbnail concept",
-            )
+            _render_visual_result("Visual Brief", brief_text, meta="Thumbnail concept")
             if st.button("Send concept to Chat", key="visual_concept_send_to_chat"):
                 st.session_state["main_ai_copilot_input"] = str(st.session_state["thumbnail_prompt"])
                 st.session_state["active_workspace"] = "AI Chat"
                 st.rerun()
 
     with tabs[1]:
-        st.markdown("### Thumbnail Direction")
-        st.caption("Thumbnail-ready direction based on the current topic and platform.")
-        direction = st.text_area("Visual direction", value=st.session_state.get("project_context", {}).get("visual_direction") or st.session_state.get("thumbnail_prompt") or (f"{st.session_state.get('project_context', {}).get('selected_title') or st.session_state.get('project_context', {}).get('idea') or st.session_state.get('project_context', {}).get('topic') or 'your topic'} on {project_platform} with strong hook, readable headline, and cinematic framing."), key="visual_direction_input", height=150)
-        if st.button("Save direction", key="visual_direction_save"):
+        with st.container(border=True):
+            st.markdown("### Thumbnail Direction")
+            st.caption("Thumbnail-ready direction based on the current topic and platform.")
+            direction = st.text_area("Visual direction", value=st.session_state.get("project_context", {}).get("visual_direction") or st.session_state.get("thumbnail_prompt") or (f"{st.session_state.get('project_context', {}).get('selected_title') or st.session_state.get('project_context', {}).get('idea') or st.session_state.get('project_context', {}).get('topic') or 'your topic'} on {project_platform} with strong hook, readable headline, and cinematic framing."), key="visual_direction_input", height=150)
+            save_direction_clicked = st.button("Save direction", key="visual_direction_save")
+        if save_direction_clicked:
             update_project_context(visual_direction=direction.strip(), content_type="visual", platform=project_platform)
             st.success("Direction saved to project context.")
         if direction.strip():
-            st.markdown(
-                f"""
-                <div class="premium-card" style="padding: 1rem; margin-top: 0.7rem;">
-                    <div class="badge" style="margin-bottom: 0.7rem;">Direction</div>
-                    <div class="meta" style="white-space: pre-wrap; line-height: 1.7;">{html_escape(direction)}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            _render_visual_result("Direction", direction, meta=project_platform)
 
     with tabs[2]:
-        st.markdown("### Image Prompt / Visual Prompt")
-        st.caption("Prompt text ready for future design or generation workflows without claiming unsupported generation features.")
-        prompt = st.text_area("Prompt", value=st.session_state.get("thumbnail_prompt") or "", key="visual_prompt_input", height=170)
-        if st.button("Generate prompt", key="visual_prompt_generate"):
-            if st.session_state.get("project_context", {}).get("topic"):
-                prompt_text = f"Create a cinematic {project_platform} thumbnail concept for '{st.session_state['project_context']['topic']}'. Use a bold headline, high contrast, readable type, strong focal point, and premium storytelling composition."
-                update_project_context(visual_direction=prompt_text, content_type="visual", platform=project_platform)
+        with st.container(border=True):
+            st.markdown("### Image Prompt / Visual Prompt")
+            st.caption("Prompt text ready for future design or generation workflows without claiming unsupported generation features.")
+            prompt = st.text_area("Prompt", value=st.session_state.get("thumbnail_prompt") or "", key="visual_prompt_input", height=170)
+            generate_prompt_clicked = st.button("Generate prompt", key="visual_prompt_generate")
+        if generate_prompt_clicked:
+            project_topic = st.session_state.get("project_context", {}).get("topic") or visual_topic.strip()
+            if project_topic or prompt.strip():
+                topic_for_prompt = project_topic or prompt.strip()
+                user_direction = f" User-provided direction: {prompt.strip()}" if prompt.strip() else ""
+                prompt_text = f"Create a cinematic {project_platform} thumbnail concept for '{topic_for_prompt}'. Use a bold headline, high contrast, readable type, strong focal point, and premium storytelling composition.{user_direction}"
+                update_project_context(topic=project_topic or topic_for_prompt, visual_direction=prompt_text, content_type="visual", platform=project_platform)
                 st.session_state["thumbnail_prompt"] = prompt_text
                 st.success("Prompt generated.")
             else:
                 st.warning("Add a topic first to create a valid prompt.")
         if st.session_state.get("thumbnail_prompt"):
-            st.markdown(
-                f"""
-                <div class="premium-card" style="padding: 1rem; margin-top: 0.7rem;">
-                    <div class="badge" style="margin-bottom: 0.7rem;">Prompt</div>
-                    <div class="meta" style="white-space: pre-wrap; line-height: 1.7;">{html_escape(st.session_state['thumbnail_prompt'])}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            _render_visual_result("Prompt", st.session_state["thumbnail_prompt"], meta=project_platform)
             render_copy_button(st.session_state["thumbnail_prompt"])
 
     with tabs[3]:
-        st.markdown("### Saved Visual Direction")
-        st.caption("Reusable visual direction stored in the project context.")
+        with st.container(border=True):
+            st.markdown("### Saved Visual Direction")
+            st.caption("Reusable visual direction stored in the project context.")
         stored = st.session_state.get("project_context", {}).get("visual_direction") or st.session_state.get("thumbnail_prompt") or ""
         if stored:
             brief = {
@@ -6055,17 +6505,11 @@ def render_visual_workspace() -> None:
                 "Text direction": "Headline-first with high contrast and legibility.",
                 "Prompt": stored,
             }
-            for label, value in brief.items():
-                if value:
-                    st.markdown(
-                        f"""
-                        <div class="premium-card" style="padding: 0.9rem 1rem; margin-bottom: 0.6rem;">
-                            <div class="badge" style="margin-bottom: 0.5rem;">{html_escape(label)}</div>
-                            <div class="meta" style="white-space: pre-wrap; line-height: 1.7;">{html_escape(value)}</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
+            with st.container(border=True):
+                st.markdown(f"### {t('result.visual')}")
+                for label, value in brief.items():
+                    if value:
+                        render_artifact_card(label, value, badge=label, meta=project_platform)
             if st.button("Save to project", key="visual_saved_save"):
                 update_project_context(visual_direction=stored, content_type="visual")
                 st.success("Saved to project context.")

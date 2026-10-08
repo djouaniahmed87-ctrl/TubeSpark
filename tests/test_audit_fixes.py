@@ -16,10 +16,11 @@ class AuditFixTests(unittest.TestCase):
             niche="Education",
             primary_keyword="study skills",
             audience="College students",
+            platform="YouTube",
         )
 
         self.assertEqual(topic, "Working title")
-        for value in ("Education", "Existing description", "study skills", "College students"):
+        for value in ("YouTube", "Education", "Existing description", "study skills", "College students"):
             self.assertIn(value, context)
 
     def test_seo_title_outputs_are_rendered(self):
@@ -43,7 +44,28 @@ class AuditFixTests(unittest.TestCase):
         button_calls = []
 
         def text_input(_label, **kwargs):
-            return "A standalone topic" if kwargs.get("key") == "workspace_script_topic" else ""
+            values = {
+                "script_writer_title": "Hands-on coffee setup",
+                "workspace_script_topic": "A standalone topic",
+                "script_writer_audience": "Home baristas",
+            }
+            return values.get(kwargs.get("key"), "")
+
+        def text_area(_label, **kwargs):
+            values = {
+                "script_writer_key_points": "Compare two grinders",
+                "script_writer_context": "Keep it budget friendly",
+            }
+            return values.get(kwargs.get("key"), "")
+
+        def selectbox(_label, options, **kwargs):
+            selected = {
+                "script_writer_content_type": "Podcast",
+                "script_writer_duration": "15+ min",
+                "script_writer_vibe": "educational",
+                "script_writer_language": "fr",
+            }.get(kwargs.get("key"))
+            return selected if selected in options else options[kwargs.get("index", 0)]
 
         def button(_label, **kwargs):
             button_calls.append(kwargs.get("key"))
@@ -52,11 +74,12 @@ class AuditFixTests(unittest.TestCase):
         with (
             patch.object(app.st, "session_state", state),
             patch.object(app.st, "text_input", side_effect=text_input),
-            patch.object(app.st, "text_area", return_value=""),
-            patch.object(app.st, "selectbox", side_effect=lambda _label, options, **kwargs: options[kwargs.get("index", 0)]),
+            patch.object(app.st, "text_area", side_effect=text_area),
+            patch.object(app.st, "selectbox", side_effect=selectbox),
             patch.object(app.st, "button", side_effect=button),
             patch.object(app.st, "spinner", return_value=nullcontext()),
             patch.object(app.st, "columns", side_effect=lambda n, **kwargs: [nullcontext() for _ in range(n)]),
+            patch.object(app.st, "container", return_value=nullcontext()),
             patch.object(app.st, "markdown"),
             patch.object(app.st, "write"),
             patch.object(app.st, "success"),
@@ -69,14 +92,21 @@ class AuditFixTests(unittest.TestCase):
 
         generate_script.assert_called_once()
         self.assertEqual(generate_script.call_args.args[0], "A standalone topic")
+        self.assertEqual(generate_script.call_args.kwargs["platform"], "YouTube")
+        self.assertEqual(generate_script.call_args.kwargs["vibe"], "educational")
+        self.assertEqual(generate_script.call_args.kwargs["audience"], "Home baristas")
+        self.assertEqual(generate_script.call_args.kwargs["duration"], "15min+")
+        self.assertEqual(generate_script.call_args.kwargs["lang"], "fr")
+        for value in ("Hands-on coffee setup", "Content type: Podcast", "Compare two grinders", "Keep it budget friendly"):
+            self.assertIn(value, generate_script.call_args.args[1])
         self.assertEqual(state["script_result"].title, "Generated title")
 
     def test_seo_optimizer_forwards_fields_and_renders_backend_titles(self):
         seo_result = app.SEOData(
-            thumbnail_texts=(),
+            thumbnail_texts=("Strong thumbnail text",),
             seo_titles=("SEO title suggestion",),
             clickbait_titles=("Curiosity title suggestion",),
-            chapters=(),
+            chapters=("0:00 - Intro",),
             seo_description="Optimized description",
             seo_tags=("study skills",),
         )
@@ -107,13 +137,14 @@ class AuditFixTests(unittest.TestCase):
             patch.object(app.st, "button", side_effect=button),
             patch.object(app.st, "spinner", return_value=nullcontext()),
             patch.object(app.st, "markdown", side_effect=lambda value, **kwargs: rendered_markdown.append(value)),
+            patch.object(app.st, "container", return_value=nullcontext()),
             patch.object(app.st, "caption"),
             patch.object(app.st, "success"),
             patch.object(app.st, "warning"),
             patch.object(app.st, "info"),
             patch.object(app, "render_workspace_header"),
             patch.object(app, "render_platform_picker", return_value="YouTube"),
-            patch.object(app, "render_artifact_card"),
+            patch.object(app, "render_artifact_card") as render_artifact,
             patch.object(app, "render_copy_button"),
             patch.object(app, "_seo_from_groq", return_value=seo_result) as generate_seo,
         ):
@@ -122,11 +153,13 @@ class AuditFixTests(unittest.TestCase):
         generate_seo.assert_called_once()
         self.assertEqual(generate_seo.call_args.args[0], "Working title")
         context = generate_seo.call_args.args[1]
-        for value in ("Education", "Existing description", "study skills", "College students"):
+        for value in ("YouTube", "Education", "Existing description", "study skills", "College students"):
             self.assertIn(value, context)
         rendered = "\n".join(rendered_markdown)
         self.assertIn("SEO title suggestion", rendered)
         self.assertIn("Curiosity title suggestion", rendered)
+        self.assertIn("Strong thumbnail text", rendered)
+        self.assertTrue(any(call.args[1] == "0:00 - Intro" for call in render_artifact.call_args_list))
 
     def test_chat_actions_remain_available_after_message_and_action_reruns(self):
         state = {"main_ai_copilot_input": "topic: a test topic"}
@@ -142,14 +175,21 @@ class AuditFixTests(unittest.TestCase):
             count = spec if isinstance(spec, int) else len(spec)
             return [nullcontext() for _ in range(count)]
 
+        def form_submit_button(_label, **kwargs):
+            return kwargs.get("key") == current_click["key"]
+
         with (
             patch.object(app.st, "session_state", state),
             patch.object(app.st, "button", side_effect=button),
             patch.object(app.st, "columns", side_effect=columns),
-            patch.object(app.st, "text_input"),
+            patch.object(app.st, "form", return_value=nullcontext()),
+            patch.object(app.st, "form_submit_button", side_effect=form_submit_button),
+            patch.object(app.st, "text_input", return_value="topic: a test topic"),
+            patch.object(app.st, "container", return_value=nullcontext()),
             patch.object(app.st, "chat_message", side_effect=lambda *_args, **_kwargs: nullcontext()),
             patch.object(app.st, "markdown"),
             patch.object(app.st, "caption"),
+            patch.object(app.st, "write"),
             patch.object(app.st, "success"),
             patch.object(app.st, "info"),
             patch.object(app.st, "rerun"),

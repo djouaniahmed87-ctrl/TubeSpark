@@ -412,6 +412,136 @@ I18N: dict[str, dict[str, str]] = {
         "ar": "مساعد الذكاء الاصطناعي",
         "fr": "Assistant IA",
     },
+    "chat.user_request": {
+        "en": "User request",
+        "ar": "طلب المستخدم",
+        "fr": "Demande utilisateur",
+    },
+    "chat.ai_response": {
+        "en": "AI response",
+        "ar": "رد الذكاء الاصطناعي",
+        "fr": "Réponse de l'IA",
+    },
+    "chat.latest_result": {
+        "en": "Structured result",
+        "ar": "النتيجة المنظمة",
+        "fr": "Résultat structuré",
+    },
+    "chat.result_ready": {
+        "en": "The generated result is shown below and saved to the project.",
+        "ar": "تظهر النتيجة المُنشأة أدناه وحُفظت في المشروع.",
+        "fr": "Le résultat généré est affiché ci-dessous et enregistré dans le projet.",
+    },
+    "chat.copy_result": {
+        "en": "Copy result",
+        "ar": "نسخ النتيجة",
+        "fr": "Copier le résultat",
+    },
+    "chat.voice_unavailable": {
+        "en": "Voice input is unavailable in this chat. Use the text field to send your request.",
+        "ar": "الإدخال الصوتي غير متاح في هذه المحادثة. استخدم حقل النص لإرسال طلبك.",
+        "fr": "La saisie vocale n'est pas disponible dans ce chat. Utilisez le champ texte pour envoyer votre demande.",
+    },
+    "result.ideas": {
+        "en": "Generated ideas",
+        "ar": "الأفكار المُنشأة",
+        "fr": "Idées générées",
+    },
+    "result.script": {
+        "en": "Generated script",
+        "ar": "السكريبت المُنشأ",
+        "fr": "Script généré",
+    },
+    "result.seo": {
+        "en": "SEO results",
+        "ar": "نتائج تحسين محركات البحث",
+        "fr": "Résultats SEO",
+    },
+    "result.evaluation": {
+        "en": "Evaluation result",
+        "ar": "نتيجة التقييم",
+        "fr": "Résultat de l'évaluation",
+    },
+    "result.visual": {
+        "en": "Visual result",
+        "ar": "النتيجة المرئية",
+        "fr": "Résultat visuel",
+    },
+    "result.description": {
+        "en": "Description",
+        "ar": "الوصف",
+        "fr": "Description",
+    },
+    "result.sections": {
+        "en": "Script sections",
+        "ar": "أقسام السكريبت",
+        "fr": "Sections du script",
+    },
+    "result.keywords": {
+        "en": "Keywords",
+        "ar": "الكلمات المفتاحية",
+        "fr": "Mots-clés",
+    },
+    "result.hashtags": {
+        "en": "Hashtags",
+        "ar": "الوسوم",
+        "fr": "Hashtags",
+    },
+    "result.chapters": {
+        "en": "Chapters",
+        "ar": "الفصول",
+        "fr": "Chapitres",
+    },
+    "result.thumbnail_texts": {
+        "en": "Thumbnail text",
+        "ar": "نصوص الصورة المصغرة",
+        "fr": "Textes de miniature",
+    },
+    "result.platform": {
+        "en": "Platform",
+        "ar": "المنصة",
+        "fr": "Plateforme",
+    },
+    "result.audience": {
+        "en": "Audience",
+        "ar": "الجمهور",
+        "fr": "Public",
+    },
+    "result.topic": {
+        "en": "Topic",
+        "ar": "الموضوع",
+        "fr": "Sujet",
+    },
+    "result.content_type": {
+        "en": "Content type",
+        "ar": "نوع المحتوى",
+        "fr": "Type de contenu",
+    },
+    "result.language": {
+        "en": "Language",
+        "ar": "اللغة",
+        "fr": "Langue",
+    },
+    "result.style": {
+        "en": "Style",
+        "ar": "الأسلوب",
+        "fr": "Style",
+    },
+    "result.niche": {
+        "en": "Niche",
+        "ar": "المجال",
+        "fr": "Niche",
+    },
+    "result.title": {
+        "en": "Title",
+        "ar": "العنوان",
+        "fr": "Titre",
+    },
+    "result.duration": {
+        "en": "Target duration",
+        "ar": "المدة المستهدفة",
+        "fr": "Durée cible",
+    },
     "footer.brand": {
         "en": "TubeSpark",
         "ar": "TubeSpark",
@@ -1051,6 +1181,11 @@ I18N: dict[str, dict[str, str]] = {
         "en": "After suggested upgrade",
         "ar": "بعد التطوير المقترح",
         "fr": "Après amélioration proposée",
+    },
+    "eval.context_considered": {
+        "en": "Context considered",
+        "ar": "السياق الذي أُخذ في الاعتبار",
+        "fr": "Contexte pris en compte",
     },
     "eval.empty": {
         "en": "There is no text to rate.",
